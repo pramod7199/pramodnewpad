@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Existing permissions (unchanged) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SoundStudio">
+
+        <!-- Launcher -->
+        <activity android:name=".DashboardActivity" android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ── Existing activities (unchanged) ──────────────────────── -->
+        <activity android:name=".FilesActivity"          android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".RecordActivity"         android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".EditorActivity"         android:exported="false" android:screenOrientation="portrait"/>
+
+        <!-- ── v2.0 professional modules (unchanged) ────────────────── -->
+        <activity android:name=".EditorLauncherActivity" android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".AutoTrimActivity"       android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".DrumSplitterActivity"   android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".VocalRemoverActivity"   android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".EnhancementActivity"    android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".AnalysisActivity"       android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".EffectsActivity"        android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".ConverterActivity"      android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".BatchActivity"          android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".OctapadToolsActivity"   android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".SettingsActivity"       android:exported="false" android:screenOrientation="portrait"/>
+
+        <!-- ── v3.0 NEW activities ──────────────────────────────────── -->
+        <!-- Ultra-Precision AI Rhythm Slicer (highest priority module) -->
+        <activity android:name=".RhythmSlicerActivity"  android:exported="false" android:screenOrientation="portrait"/>
+        <!-- Echo Recording Mode (real-time echo DSP) -->
+        <activity android:name=".EchoRecordActivity"    android:exported="false" android:screenOrientation="portrait"/>
+
+        <!-- Background recording service (unchanged) -->
+        <service android:name=".RecordingService" android:exported="false"
+            android:foregroundServiceType="microphone"/>
+
+        <!-- FileProvider (unchanged) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.pramod.soundstudio.fileprovider"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
+
+    </application>
+</manifest>
