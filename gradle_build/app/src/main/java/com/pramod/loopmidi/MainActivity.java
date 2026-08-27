@@ -1251,14 +1251,13 @@ public class MainActivity extends Activity {
                 AudioEngine.SampleData sampleData = this.samples[index];
                 if (sampleData != null && sampleData.loaded) {
                     float vol = this.padVolume[index] * this.padGain[index] * velocityScale * this.drumMasterVolume;
-                    // Keep MIDI drum playback polyphonic: each hit should trigger its own
-                    // voice immediately, without getting collapsed by the pad's global choke
-                    // settings in a way that suppresses simultaneous hits from the SPD-20 Pro.
-                    // NOTE: 16-arg overload — speed=1.0 (fixed), pitch=padPitch, pan=padPan.
+                    // Pass the selected choke group through to native playback. A group
+                    // value of 0 means "no choke"; matching non-zero groups stop the
+                    // previous drum voice before this hit starts.
                     this.audioEngine.playSample(index, sampleData, vol, 1.0f, this.padPitch[index] * this.drumMasterPitch, 0,
                         this.padDelayOn[index], this.padDelayTime[index], this.padDelayLevel[index],
                         this.padEqLow[index], this.padEqMid[index], this.padEqHigh[index],
-                        0, 0.0f, 0.0f, this.padPan[index]);
+                        this.padChokeGroup[index], 0.0f, 0.0f, this.padPan[index]);
                 }
             }
             // Bank B: plays when bankMode is BANK_B or LAYER_AB — uses voice slots 8-15
@@ -1269,7 +1268,7 @@ public class MainActivity extends Activity {
                     this.audioEngine.playSample(index + 8, sampleDataB, volB, 1.0f, this.padPitchB[index] * this.drumMasterPitch, 0,
                         this.padDelayOnB[index], this.padDelayTimeB[index], this.padDelayLevelB[index],
                         this.padEqLowB[index], this.padEqMidB[index], this.padEqHighB[index],
-                        0, 0.0f, 0.0f, this.padPanB[index]);
+                        this.padChokeGroupB[index], 0.0f, 0.0f, this.padPanB[index]);
                 }
             }
         } catch (Exception e) {
@@ -2549,7 +2548,8 @@ public class MainActivity extends Activity {
                                 (editB ? padDelayTimeB : padDelayTime)[padIdx],
                                 (editB ? padDelayLevelB : padDelayLevel)[padIdx],
                                 wEqL[padIdx], wEqM[padIdx], wEqH[padIdx],
-                                0, 0f, 0f, wPan[padIdx]);
+                                 (editB ? padChokeGroupB : padChokeGroup)[padIdx],
+                                 0f, 0f, wPan[padIdx]);
                             lastPreviewPadIdx = slot;
                         }
                     } catch (Exception ignored) {}
@@ -2622,7 +2622,8 @@ public class MainActivity extends Activity {
                                 (editB ? padDelayTimeB : padDelayTime)[pad],
                                 (editB ? padDelayLevelB : padDelayLevel)[pad],
                                 wEqL[pad], wEqM[pad], wEqH[pad],
-                                0, 0f, 0f, wPan[pad]);
+                                 (editB ? padChokeGroupB : padChokeGroup)[pad],
+                                 0f, 0f, wPan[pad]);
                             lastPreviewPadIdx = slot;
                         }
                     } catch (Exception ignored) {}
@@ -2678,7 +2679,8 @@ public class MainActivity extends Activity {
                         paramDefault[3] * paramDefault[4], 1.0f, paramDefault[5], 0,
                         false, 0f, 0f,
                         paramDefault[0], paramDefault[1], paramDefault[2],
-                        0, 0f, 0f, paramDefault[6]);
+                         (editB ? padChokeGroupB : padChokeGroup)[pad],
+                         0f, 0f, paramDefault[6]);
                     lastPreviewPadIdx = slot;
                 }
             } catch (Exception ignored) {}
