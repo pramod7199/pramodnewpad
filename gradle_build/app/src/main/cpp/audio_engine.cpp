@@ -313,14 +313,17 @@ public:
             // Pre-warm Sonic streams at construction time so the first loop
             // play() call doesn't incur sonicCreateStream malloc on the audio
             // thread — eliminates the 2-5ms "first hit" delay for loop pads.
-            loopSonic[i] = sonicCreateStream(48000, 1); // 48kHz default; reinit() updates SR
+            // Loop assets are decoded as interleaved stereo by AudioEngine.
+            // Keep Sonic stereo from the first allocation so a stream restart
+            // cannot reinterpret L/R samples as a mono sequence.
+            loopSonic[i] = sonicCreateStream(48000, 2); // 48kHz default; reinit() updates SR
             loopSonicLastSpeed[i] = 1.f;
             loopSonicLastVol[i]   = 1.f;
             loopSonicLastPan[i]   = 0.f;
             loopPitchRamp[i]      = 1.f;
             loopPitchPos[i]       = 0.f;
             loopRingTotal[i]      = 0;
-            loopSonicChannels[i]  = 1;   // default mono; updated on CMD_PLAY
+            loopSonicChannels[i]  = 2;   // decoded loop buffers are interleaved stereo
         }
     }
 
@@ -1039,19 +1042,23 @@ public:
         // stream is at default 1.0 → wrong playback speed.
         for (int i = 0; i < LOOP_VOICES; i++) {
             if (loopSonic[i]) sonicDestroyStream(loopSonic[i]);
-            loopSonic[i] = sonicCreateStream(sampleRate, 1);
+            // All Java-decoded samples are interleaved stereo. Recreating Sonic
+            // as mono corrupts active stereo loops after a device change
+            // or stream recovery.
+            loopSonic[i] = sonicCreateStream(sampleRate, 2);
             loopSonicLastSpeed[i] = 1.0f;
             loopSonicLastVol[i]   = 1.0f;
             loopSonicLastPan[i]   = 0.0f;
             loopPitchRamp[i]      = 1.0f;
             loopPitchPos[i]       = 0.0f;
             loopRingTotal[i]      = 0;
-            loopSonicChannels[i]  = 1; // reset; updated at next CMD_PLAY
+            loopSonicChannels[i]  = 2; // stereo; updated at next CMD_PLAY
         }
 
         oboe::AudioStreamBuilder b;
-        // bufferCapacity: 3 bursts — gives the scheduler headroom without inflating latency
-        // bufferSize (set after open): 1 burst — absolute minimum latency
+        // bufferCapacity: 3 bursts — gives the scheduler headroom.
+        // bufferSize (set after open): 2 bursts — enough safety for devices
+        // whose audio thread is occasionally delayed by the system scheduler.
         // setUsage(Game) + setContentType(Music): tells Android HAL this is a
         // real-time instrument app → OS scheduler gives audio thread highest
         // priority, reduces wakeup jitter by 3–8ms on many devices.
@@ -1077,10 +1084,12 @@ public:
             if (r != oboe::Result::OK) { LOGE("openStream shared also failed"); return false; }
         }
 
-        // 1 burst = minimum latency for real-time drum triggers.
-        // 2-burst "safe" default was adding ~5–10ms of unnecessary output
-        // latency; hardware glitch-guard is the driver's job in Exclusive+LowLatency.
-        stream->setBufferSizeInFrames(framesPerBurst * 1);
+        // A single-burst buffer is prone to underruns on some vendor audio
+        // drivers even when the callback itself is correct. Two bursts keep
+        // loop playback clean while adding only a small amount of latency.
+        int actualBurst = stream->getFramesPerBurst();
+        if (actualBurst < 32) actualBurst = framesPerBurst;
+        stream->setBufferSizeInFrames(actualBurst * 2);
 
         // Store Oboe's assigned audio session ID so Java Equalizer can attach
         // to this stream instead of the default session 0 (which bypasses Oboe).
