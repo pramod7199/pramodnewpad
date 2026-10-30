@@ -9,9 +9,12 @@ Deploy it to the Firebase project configured in `.firebaserc`:
 ```sh
 npm ci --prefix functions
 firebase login
-firebase deploy --only functions:notifyAdminOfPendingRequest --project pramod-octapad-loop
+firebase deploy --only functions --project pramod-octapad-loop
 ```
 
 Cloud Functions deployment requires a Firebase project with billing enabled
-and access to deploy functions. Android 13 and later also require the admin to
-allow notifications for the Admin Panel app.
+and access to deploy functions. The `listRegisteredUsers` callable is restricted
+to the configured Admin Panel email; it supplements Realtime Database records
+to find registered accounts whose old deactivation removed their database entry.
+Android 13 and later also require the admin to allow notifications for the
+Admin Panel app.

@@ -23,10 +23,13 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.functions.FirebaseFunctions;
+import com.google.firebase.functions.HttpsCallableResult;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class AdminDashboardActivity extends AppCompatActivity {
@@ -66,12 +69,14 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private final List<UserEntry> allUsers = new ArrayList<>();
     private final List<UserEntry> deactivatedUsers = new ArrayList<>();
+    private final List<UserEntry> registeredUsers = new ArrayList<>();
     private final List<PendingEntry> pendingRequests = new ArrayList<>();
 
     private static class UserEntry {
         String uid, email, displayName, deviceToken;
         boolean hasFull, hasLoops, hasDrums;
         boolean isDeactivated;
+        boolean needsAccessSelection;
         long activatedAt;
 
         boolean hasAnyAppAccess() {
@@ -96,6 +101,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         listenPending();
         listenActive();
         listenDeactivated();
+        loadRegisteredUsers(false, null);
     }
 
     @Override
@@ -292,10 +298,9 @@ public class AdminDashboardActivity extends AppCompatActivity {
         for (DataSnapshot child : snapshot.getChildren()) {
             PendingEntry entry = new PendingEntry();
             entry.uid = child.getKey();
-            entry.email = child.child("email").getValue(String.class);
-            entry.displayName = child.child("displayName").getValue(String.class);
-            Long timestamp = child.child("timestamp").getValue(Long.class);
-            entry.timestamp = timestamp != null ? timestamp : 0;
+            entry.email = readText(child.child("email"));
+            entry.displayName = readText(child.child("displayName"));
+            entry.timestamp = readTimestamp(child.child("timestamp"));
             pendingRequests.add(entry);
         }
         applySearchAndFilter();
@@ -377,6 +382,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
             UserEntry entry = parseUserEntry(child, false);
             if (entry != null) allUsers.add(entry);
         }
+        android.util.Log.i("AdminDashboard",
+                "Loaded " + allUsers.size() + " records from authorizedUsers");
         applySearchAndFilter();
     }
 
@@ -402,6 +409,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
             UserEntry entry = parseUserEntry(child, true);
             if (entry != null) deactivatedUsers.add(entry);
         }
+        android.util.Log.i("AdminDashboard",
+                "Loaded " + deactivatedUsers.size() + " records from deactivatedUsers");
         applySearchAndFilter();
     }
 
@@ -411,7 +420,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void refreshLists() {
         if (refreshPendingReads > 0) return;
-        refreshPendingReads = 3;
+        refreshPendingReads = 4;
         refreshFailureCount = 0;
         refreshErrors = new StringBuilder();
         btnRefresh.setEnabled(false);
@@ -420,6 +429,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         refreshReference(pendingRef, "Pending", this::updatePending);
         refreshReference(usersRef, "Active", this::updateActive);
         refreshReference(deactivatedRef, "Deactivated", this::updateDeactivated);
+        loadRegisteredUsers(true, this::completeRefreshRead);
     }
 
     private void refreshReference(DatabaseReference reference, String listName,
@@ -430,55 +440,180 @@ public class AdminDashboardActivity extends AppCompatActivity {
             if (task.isSuccessful() && task.getResult() != null) {
                 update.apply(task.getResult());
             } else {
-                refreshFailureCount++;
-                if (refreshErrors.length() > 0) refreshErrors.append(", ");
-                refreshErrors.append(listName);
                 Exception error = task.getException();
                 if (error != null) {
                     android.util.Log.e("AdminDashboard", listName + " refresh failed", error);
                 }
+                recordRefreshFailure(listName);
             }
 
-            refreshPendingReads--;
-            if (refreshPendingReads == 0) {
-                btnRefresh.setEnabled(true);
-                btnRefresh.setText("Refresh");
-                String message = refreshFailureCount == 0
-                        ? "Lists refreshed."
-                        : "Could not refresh: " + refreshErrors;
-                Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-            }
+            completeRefreshRead();
         });
+    }
+
+    private void completeRefreshRead() {
+        refreshPendingReads--;
+        if (refreshPendingReads != 0 || isFinishing() || isDestroyed()) return;
+
+        btnRefresh.setEnabled(true);
+        btnRefresh.setText("Refresh");
+        String message = refreshFailureCount == 0
+                ? "Lists refreshed."
+                : "Could not refresh: " + refreshErrors;
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    private void recordRefreshFailure(String listName) {
+        refreshFailureCount++;
+        if (refreshErrors.length() > 0) refreshErrors.append(", ");
+        refreshErrors.append(listName);
+    }
+
+    private interface RegisteredUsersCallback {
+        void onComplete();
+    }
+
+    private void loadRegisteredUsers(boolean reportErrors, RegisteredUsersCallback callback) {
+        fetchRegisteredUsersPage(null, new ArrayList<>(), reportErrors, callback);
+    }
+
+    private void fetchRegisteredUsersPage(String pageToken, List<UserEntry> loadedUsers,
+                                          boolean reportErrors,
+                                          RegisteredUsersCallback callback) {
+        Map<String, Object> request = new HashMap<>();
+        if (!TextUtils.isEmpty(pageToken)) request.put("pageToken", pageToken);
+
+        FirebaseFunctions.getInstance("asia-southeast1")
+                .getHttpsCallable("listRegisteredUsers")
+                .call(request)
+                .addOnCompleteListener(this, task -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (!task.isSuccessful() || task.getResult() == null) {
+                        Exception error = task.getException();
+                        android.util.Log.e("AdminDashboard",
+                                "Registered user fetch failed", error);
+                        if (reportErrors) {
+                            recordRefreshFailure("Registered users");
+                            Toast.makeText(this,
+                                    "Registered user fetch failed: "
+                                            + (error != null ? error.getLocalizedMessage() : "Unknown error"),
+                                    Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(this,
+                                    "Registered users could not be loaded. Check Firebase Functions deployment.",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                        if (callback != null) callback.onComplete();
+                        return;
+                    }
+
+                    Object rawData = task.getResult().getData();
+                    if (!(rawData instanceof Map)) {
+                        android.util.Log.e("AdminDashboard",
+                                "Registered user response was not an object");
+                        if (reportErrors) recordRefreshFailure("Registered users");
+                        else Toast.makeText(this,
+                                "Registered user data response was invalid.",
+                                Toast.LENGTH_LONG).show();
+                        if (callback != null) callback.onComplete();
+                        return;
+                    }
+
+                    Map<?, ?> result = (Map<?, ?>) rawData;
+                    Object rawUsers = result.get("users");
+                    if (!(rawUsers instanceof List)) {
+                        android.util.Log.e("AdminDashboard",
+                                "Registered user response did not contain a user list");
+                        if (reportErrors) recordRefreshFailure("Registered users");
+                        else Toast.makeText(this,
+                                "Registered user data response was invalid.",
+                                Toast.LENGTH_LONG).show();
+                        if (callback != null) callback.onComplete();
+                        return;
+                    }
+
+                    for (Object rawUser : (List<?>) rawUsers) {
+                        if (!(rawUser instanceof Map)) continue;
+                        Map<?, ?> user = (Map<?, ?>) rawUser;
+                        Object uid = user.get("uid");
+                        if (!(uid instanceof String) || TextUtils.isEmpty((String) uid)) continue;
+
+                        UserEntry entry = new UserEntry();
+                        entry.uid = (String) uid;
+                        entry.email = user.get("email") instanceof String
+                                ? (String) user.get("email") : "";
+                        entry.displayName = user.get("displayName") instanceof String
+                                ? (String) user.get("displayName") : "";
+                        entry.isDeactivated = true;
+                        entry.needsAccessSelection = true;
+                        loadedUsers.add(entry);
+                    }
+
+                    Object nextPageToken = result.get("nextPageToken");
+                    if (nextPageToken instanceof String
+                            && !TextUtils.isEmpty((String) nextPageToken)) {
+                        fetchRegisteredUsersPage((String) nextPageToken, loadedUsers,
+                                reportErrors, callback);
+                        return;
+                    }
+
+                    registeredUsers.clear();
+                    registeredUsers.addAll(loadedUsers);
+                    android.util.Log.i("AdminDashboard",
+                            "Loaded " + registeredUsers.size() + " registered Firebase Auth users");
+                    applySearchAndFilter();
+                    if (callback != null) callback.onComplete();
+                });
     }
 
     /** Parse a DataSnapshot into a UserEntry. */
     private UserEntry parseUserEntry(DataSnapshot child, boolean isDeactivated) {
         UserEntry entry = new UserEntry();
         entry.uid = child.getKey();
-        entry.email = child.child("email").getValue(String.class);
-        entry.displayName = child.child("displayName").getValue(String.class);
-        entry.deviceToken = child.child("deviceToken").getValue(String.class);
+        entry.email = readText(child.child("email"));
+        entry.displayName = readText(child.child("displayName"));
+        entry.deviceToken = readText(child.child("deviceToken"));
         entry.isDeactivated = isDeactivated;
 
         DataSnapshot appsSnap = child.child("allowedApps");
-        entry.hasFull  = !appsSnap.exists()
-                || Boolean.TRUE.equals(appsSnap.child("full").getValue(Boolean.class));
-        entry.hasLoops = !appsSnap.exists()
-                || Boolean.TRUE.equals(appsSnap.child("loops").getValue(Boolean.class));
-        entry.hasDrums = !appsSnap.exists()
-                || Boolean.TRUE.equals(appsSnap.child("drums").getValue(Boolean.class));
+        // Older authorized records predate per-app access and are valid for all apps.
+        entry.hasFull = readAppAccess(appsSnap, "full");
+        entry.hasLoops = readAppAccess(appsSnap, "loops");
+        entry.hasDrums = readAppAccess(appsSnap, "drums");
 
-        Long ts = child.child("activatedAt").getValue(Long.class);
-        entry.activatedAt = ts != null ? ts : 0;
+        entry.activatedAt = readTimestamp(child.child("activatedAt"));
         return entry;
+    }
+
+    private long readTimestamp(DataSnapshot snapshot) {
+        Object value = snapshot.getValue();
+        return value instanceof Number ? ((Number) value).longValue() : 0;
+    }
+
+    private String readText(DataSnapshot snapshot) {
+        Object value = snapshot.getValue();
+        return value instanceof String ? (String) value : null;
+    }
+
+    private boolean readAppAccess(DataSnapshot appsSnapshot, String appName) {
+        if (!appsSnapshot.exists()) return true;
+
+        Object value = appsSnapshot.child(appName).getValue();
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).doubleValue() != 0;
+        if (value instanceof String) {
+            String normalized = ((String) value).trim().toLowerCase(Locale.ROOT);
+            return "true".equals(normalized) || "1".equals(normalized) || "yes".equals(normalized);
+        }
+        return false;
     }
 
     private void applySearchAndFilter() {
         String query = "";
         if (editSearch != null && editSearch.getText() != null) {
-            query = editSearch.getText().toString().trim().toLowerCase();
+            query = editSearch.getText().toString().trim().toLowerCase(Locale.ROOT);
         }
-        String q = query.toLowerCase();
+        String q = query;
 
         pendingContainer.setVisibility(currentFilter == Filter.PENDING ? View.VISIBLE : View.GONE);
         txtPendingEmpty.setVisibility(currentFilter == Filter.PENDING ? View.VISIBLE : View.GONE);
@@ -526,6 +661,13 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 deactivatedContainer.addView(buildUserRow(entry));
                 any = true;
             }
+            for (UserEntry entry : registeredUsers) {
+                if (hasAuthorizedRecord(entry.uid) || hasDeactivatedRecord(entry.uid)
+                        || hasPendingRequest(entry.uid)
+                        || !matchesSearch(entry.uid, entry.email, entry.displayName, q)) continue;
+                deactivatedContainer.addView(buildUserRow(entry));
+                any = true;
+            }
             txtDeactivatedEmpty.setVisibility(any ? View.GONE : View.VISIBLE);
         }
 
@@ -537,9 +679,9 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private boolean matchesSearch(String uid, String email, String displayName, String query) {
         return query.isEmpty()
-                || (uid != null && uid.toLowerCase().contains(query))
-                || (email != null && email.toLowerCase().contains(query))
-                || (displayName != null && displayName.toLowerCase().contains(query));
+                || (uid != null && uid.toLowerCase(Locale.ROOT).contains(query))
+                || (email != null && email.toLowerCase(Locale.ROOT).contains(query))
+                || (displayName != null && displayName.toLowerCase(Locale.ROOT).contains(query));
     }
 
     private boolean hasAuthorizedRecord(String uid) {
@@ -551,6 +693,13 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private boolean hasPendingRequest(String uid) {
         for (PendingEntry entry : pendingRequests) {
+            if (uid != null && uid.equals(entry.uid)) return true;
+        }
+        return false;
+    }
+
+    private boolean hasDeactivatedRecord(String uid) {
+        for (UserEntry entry : deactivatedUsers) {
             if (uid != null && uid.equals(entry.uid)) return true;
         }
         return false;
@@ -580,6 +729,10 @@ public class AdminDashboardActivity extends AppCompatActivity {
         for (UserEntry entry : deactivatedUsers) {
             if (!hasAuthorizedRecord(entry.uid) && !hasPendingRequest(entry.uid)) count++;
         }
+        for (UserEntry entry : registeredUsers) {
+            if (!hasAuthorizedRecord(entry.uid) && !hasDeactivatedRecord(entry.uid)
+                    && !hasPendingRequest(entry.uid)) count++;
+        }
         return count;
     }
 
@@ -595,7 +748,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
         // Status badge
         TextView txtStatus = new TextView(this);
-        txtStatus.setText(entry.isDeactivated ? "❌ DEACTIVATED"
+        txtStatus.setText(entry.needsAccessSelection ? "⚠ REGISTERED — NO ACTIVE ACCESS"
+                : entry.isDeactivated ? "❌ DEACTIVATED"
                 : noAppAccess ? "⛔ NO APP ACCESS" : "✅ ACTIVE");
         txtStatus.setTextColor(entry.isDeactivated || noAppAccess
                 ? 0xffff4444 : 0xff44ff44);
@@ -616,10 +770,15 @@ public class AdminDashboardActivity extends AppCompatActivity {
         btnRow.setPadding(0, dp(6), 0, 0);
 
         if (entry.isDeactivated) {
-            // Deactivated user → Reactivate button
             Button btnReactivate = new Button(this);
-            btnReactivate.setText("Reactivate");
-            btnReactivate.setOnClickListener(v -> reactivateUser(entry));
+            btnReactivate.setText(entry.needsAccessSelection ? "Grant Access" : "Reactivate");
+            btnReactivate.setOnClickListener(v -> {
+                if (entry.needsAccessSelection) {
+                    showActivateRegisteredUserDialog(entry);
+                } else {
+                    reactivateUser(entry);
+                }
+            });
             btnRow.addView(btnReactivate, new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         } else if (noAppAccess) {
@@ -662,6 +821,30 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
         row.addView(btnRow);
         return row;
+    }
+
+    private void showActivateRegisteredUserDialog(UserEntry entry) {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(20);
+        layout.setPadding(pad, pad, pad, pad);
+
+        CheckBox cbFull = makeCheckBox("Full", true);
+        CheckBox cbLoops = makeCheckBox("Loops", true);
+        CheckBox cbDrums = makeCheckBox("Drums", true);
+        layout.addView(cbFull);
+        layout.addView(cbLoops);
+        layout.addView(cbDrums);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Grant app access")
+                .setMessage("Purana access record nahi mila. Apps select karein:")
+                .setView(layout)
+                .setPositiveButton("Activate", (dialog, which) ->
+                        activateUser(entry.uid, entry.email, entry.displayName,
+                                cbFull.isChecked(), cbLoops.isChecked(), cbDrums.isChecked()))
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     // ── Firebase actions ──────────────────────────────────────────────────────
