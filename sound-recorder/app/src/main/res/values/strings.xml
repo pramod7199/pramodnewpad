@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ── Existing strings (unchanged) ──────────────────────────────── -->
+    <string name="app_name">Pramod Sound Studio</string>
+    <string name="record">Record</string>
+    <string name="stop">Stop</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="trim">Trim</string>
+    <string name="auto_trim">Auto Trim</string>
+    <string name="load_to_octapad">Load to Octapad</string>
+    <string name="convert">Convert</string>
+    <string name="delete">Delete</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">Pramod Sound Studio</string>
+    <string name="dashboard_subtitle">Professional Audio Workstation</string>
+    <string name="recent_files">Recent Files</string>
+    <string name="no_recent_files">No recent files</string>
+
+    <!-- v2.0 module strings (unchanged) -->
+    <string name="module_recorder">Recorder</string>
+    <string name="module_recorder_sub">Normal · Echo · Waveform · USB</string>
+    <string name="module_files">File Manager</string>
+    <string name="module_files_sub">Browse · Play · Share</string>
+    <string name="module_editor">Audio Editor</string>
+    <string name="module_editor_sub">Trim · Cut · Paste</string>
+    <string name="module_auto_trim">Auto-Trim Engine</string>
+    <string name="module_auto_trim_sub">Ultra precision silence removal</string>
+    <string name="module_drum_splitter">Drum Splitter</string>
+    <string name="module_drum_splitter_sub">Onset detection · Per-hit export</string>
+    <string name="module_vocal_remover">Vocal Remover</string>
+    <string name="module_vocal_remover_sub">Phase cancel · Stem separation</string>
+    <string name="module_enhancement">Audio Enhancement</string>
+    <string name="module_enhancement_sub">EQ · Compressor · Noise Reduction</string>
+    <string name="module_analysis">Audio Analysis</string>
+    <string name="module_analysis_sub">BPM · LUFS · Peak · Clipping</string>
+    <string name="module_effects">Audio Effects</string>
+    <string name="module_effects_sub">Reverb · Delay · Chorus · Pitch</string>
+    <string name="module_converter">Format Converter</string>
+    <string name="module_converter_sub">WAV ↔ AAC · Resample · Mono</string>
+    <string name="module_batch">Batch Processor</string>
+    <string name="module_batch_sub">Process all files at once</string>
+    <string name="module_octapad">Octapad Tools</string>
+    <string name="module_octapad_sub">Sample prep · Kit builder · Export</string>
+    <string name="module_settings">Settings</string>
+    <string name="module_settings_sub">Defaults · Paths · Preferences</string>
+
+    <!-- Common UI -->
+    <string name="ready">Ready</string>
+    <string name="processing">Processing…</string>
+    <string name="done">Done</string>
+    <string name="error">Error</string>
+    <string name="no_files_found">No audio files found</string>
+    <string name="select_file">Select a file first</string>
+    <string name="back">←</string>
+    <string name="pick_file">📂 Pick File</string>
+    <string name="apply">Apply</string>
+    <string name="export">Export</string>
+    <string name="share">Share</string>
+    <string name="analyze">Analyze</string>
+
+    <!-- Recording service -->
+    <string name="recording_notification_title">Recording in background</string>
+    <string name="recording_notification_text">Pramod Sound Studio is recording…</string>
+    <string name="recording_channel_name">Background Recording</string>
+
+    <!-- Settings -->
+    <string name="settings_saved">Settings saved</string>
+    <string name="settings_reset">Settings reset to defaults</string>
+
+    <!-- Analysis -->
+    <string name="analysis_hint">Select a WAV file and tap Analyze</string>
+
+    <!-- Vocal Remover -->
+    <string name="vocal_remover_ai_title">AI Stem Separation Setup</string>
+
+    <!-- ── v3.0 NEW: AI Rhythm Slicer ─────────────────────────────────── -->
+    <string name="module_rhythm_slicer">AI Rhythm Slicer</string>
+    <string name="module_rhythm_slicer_sub">Drum hits · BPM · Octapad kit export</string>
+    <string name="rhythm_slicer_hint">Pick a WAV file and tap Detect Slices</string>
+    <string name="rhythm_slicer_no_slices">No slices detected — try lowering sensitivity</string>
+    <string name="rhythm_slicer_kit_built">Octapad kit built successfully</string>
+    <string name="drum_type_kick">Kick</string>
+    <string name="drum_type_snare">Snare</string>
+    <string name="drum_type_hi_hat">Hi-Hat</string>
+    <string name="drum_type_tom">Tom</string>
+    <string name="drum_type_cymbal">Cymbal</string>
+    <string name="drum_type_fill">Fill</string>
+    <string name="drum_type_roll">Roll</string>
+    <string name="drum_type_unknown">Unknown</string>
+
+    <!-- ── v3.0 NEW: Echo Recording ───────────────────────────────────── -->
+    <string name="module_echo_recorder">Echo Recorder</string>
+    <string name="module_echo_recorder_sub">Real-time echo · Delay · Feedback</string>
+    <string name="echo_mode_label">Echo Mode</string>
+    <string name="recorder_mode_dialog_title">Choose Recording Mode</string>
+    <string name="recorder_mode_normal">Normal — High-quality mic / USB</string>
+    <string name="recorder_mode_echo">Echo — Real-time delay + feedback</string>
+
+    <!-- ── v3.0 NEW: Universal Export ────────────────────────────────── -->
+    <string name="export_share_file">Share File</string>
+    <string name="export_share_zip">Share as ZIP</string>
+    <string name="export_save_music">Save to Music</string>
+    <string name="export_saved_ok">Saved to Music/PramodSoundStudio</string>
+    <string name="export_file_not_found">File not found</string>
+</resources>

@@ -1,0 +1,4 @@
+// Root build file.
+// Plugin versions and repositories are declared in settings.gradle
+// (pluginManagement + dependencyResolutionManagement), so this file
+// stays minimal — no buildscript{} block needed with the plugins DSL.

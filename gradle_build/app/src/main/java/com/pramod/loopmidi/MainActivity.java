@@ -1,0 +1,4267 @@
+package com.pramod.loopmidi;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
+import android.media.AudioManager;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.inputmethod.InputMethodManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
+import android.media.AudioDeviceCallback;
+import android.media.AudioDeviceInfo;
+import android.media.midi.MidiDevice;
+import android.media.midi.MidiDeviceInfo;
+import android.media.midi.MidiManager;
+import android.media.midi.MidiOutputPort;
+import android.media.midi.MidiReceiver;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+import android.view.MotionEvent;
+import android.view.View;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.EditText;
+import android.widget.SeekBar;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.documentfile.provider.DocumentFile;
+import com.pramod.loopmidi.AudioEngine;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.Iterator;
+import kotlin.UByte;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+/* loaded from: classes3.dex */
+public class MainActivity extends Activity {
+    private static final long HIT_BLOCK_MS = 5;
+    private static final String KEY_EDIT_MODE = "edit_mode";
+    private static final String KEY_KIT_INDEX = "kit_index";
+    private static final String KEY_LAST_LIST_FOLDER_URI = "last_list_folder_uri";
+    private static final int MAX_KITS = 100;
+    private static final int PAD_COUNT = 8;
+    private static final String PREF_NAME = "OctapadSettings";
+    private static final int REQ_LIST_FOLDER = 2003;
+    private static final int REQ_LOAD_FOLDER = 2002;
+    private static final int REQ_PICK_SINGLE_WAV = 5001;
+    private static final int REQ_SAVE_FOLDER = 2001;
+    private static final String TAG = "MainActivity";
+
+    // ── Global instance — LoopsActivity kit change forward ke liye ───────────
+    // Set in onCreate, cleared in onDestroy. Volatile for MIDI-thread visibility.
+    public static volatile MainActivity globalInstance = null;
+
+    private View advControlBar;
+    private AudioEngine.SampleData assistSoundId;
+    private Uri assistSoundUri;
+    private AudioEngine audioEngine;
+    private Button btnEditMode;
+    private Button btnSignOut;
+    private TextView txtSignedInAs;
+    // ── Admin deactivation real-time listener ──
+    private com.google.firebase.database.ValueEventListener deactivateListener;
+    private com.google.firebase.database.DatabaseReference  deactivateRef;
+    private boolean isForceLogoutInProgress = false;
+    private Button btnEq;
+    private Button btnPadEdit;
+    private Button btnLoadKit;
+    private Button btnLoops;
+    private Button btnNextKit;
+    private Button btnPrevKit;
+    private Button btnRenameKit;
+    private Button btnSaveKit;
+    private CheckBox chkDelay;
+    private View fxControlBar;
+    private volatile boolean isVisible;
+    // Velocity Sensitivity: when ON, MIDI velocity (0-127) scales the hit volume
+    private boolean velocitySensitiveMode = false;
+    private Button btnVelocity = null;
+    // ── MIDI Key Mapping System ───────────────────────────────────────────────
+    private static final int[] MIDI_NOTE_MAP_DEFAULT = {49, 45, 37, 39, 36, 38, 46, 42};
+    private boolean         midiKeyMappingEnabled = false;
+    private int[]           midiNoteMap           = MIDI_NOTE_MAP_DEFAULT.clone();
+    private volatile boolean midiLearnMode        = false;
+    private volatile int     midiLearnTargetPad   = -1;
+    private Button           btnMidiMap           = null;
+
+    // ── MIDI CC → Pad mapping ─────────────────────────────────────────────────
+    private static final int[] MIDI_CC_PAD_DEFAULT = {-1,-1,-1,-1,-1,-1,-1,-1};
+    private int[]              midiCCPadMap         = MIDI_CC_PAD_DEFAULT.clone();
+    private volatile boolean   midiCCLearnMode      = false;
+    private volatile int       midiCCLearnTargetPad = -1;
+
+    // ── MIDI CC → Global Controls learn mode ─────────────────────────────────
+    private volatile boolean          midiCCControlLearnMode = false;
+    private volatile String           midiCCControlLearnKey  = null;
+    private android.widget.TextView[] midiCCCtrlValViews     = null;
+    private Button[]                  midiCCCtrlLearnBtns    = null;
+    private String[]                  midiCCCtrlKeys         = null;
+    private android.app.AlertDialog   midiCCCtrlDialog       = null;
+    private Button                    btnCCCtrl              = null;
+    // ── MIDI CC step-control debounce ─────────────────────────────────────────
+    // SPD-20 Pro pad-triggered CC can arrive with value 0 (press) then 127 (release)
+    // or vice-versa. Step controls must fire on ANY value (not just > 0), but we
+    // debounce per-CC so a single physical press does not double-step. Index = CC no.
+    private volatile long[]           ccStepDebounceMs       = new long[128];
+
+    // ── Pad Edit dialog preview tracking ──────────────────────────────────────
+    // Tracks the pad currently previewing in the Pad Edit dialog so the next
+    // preview stops it first (no overlapping previews, low latency). -1 = none.
+    private int                       lastPreviewPadIdx      = -1;
+
+    // ── MIDI Kit Lock — SPD-20 Pro kit filter ─────────────────────────────────
+    // midiKitLockNumber: SPD-20 Pro kit no. jis pe app ka sound bajega (-1 = off)
+    // currentSpdKitNum : SPD-20 Pro ka abhi active kit (Program Change se track hota hai)
+    private volatile int  midiKitLockNumber = -1;   // -1 = lock OFF
+    private volatile int  currentSpdKitNum  = -1;   // -1 = unknown (pehle PC nahi aayi)
+    private Button        btnKitLock        = null;  // dialog me toggle button
+
+    // ── MIDI Connect/Disconnect button ────────────────────────────────────────
+    private Button btnMidiConnect = null;
+
+    private MidiManager midiManager;
+    private MidiOutputPort midiOutputPort;
+    private MidiDevice openedMidiDevice;
+    private SharedPreferences prefs;
+    private SeekBar seekChokeGroup;
+    private SeekBar seekDelayLevel;
+    private SeekBar seekDelayTime;
+    private SeekBar seekEqHigh;
+    private SeekBar seekEqLow;
+    private SeekBar seekEqMid;
+    private SeekBar seekPitch;
+    private SeekBar seekVolume;
+    private SeekBar seekMasterVolume;
+    private SeekBar seekMasterPitch;
+    private TextView txtKitName;
+    private TextView txtMidiStatus;
+    private TextView txtSelectedPad;
+    private ArrayList<MidiOutputPort> midiOutputPorts = new ArrayList<>();
+    private Button[] pads = new Button[8];
+    private Uri[] selectedWavUris = new Uri[8];
+    private int[] selectedRawResIds = new int[8];
+    private float[] padVolume = new float[8];
+    private float[] padPitch = new float[8];
+    private boolean[] padDelayOn = new boolean[8];
+    private float[] padDelayTime = new float[8];
+    private float[] padDelayLevel = new float[8];
+    private float[] padEqHigh = new float[8];
+    private float[] padEqMid = new float[8];
+    private float[] padEqLow = new float[8];
+    private int[] padChokeGroup = new int[8];
+    private float[] padGain = new float[8];   // per-pad gain multiplier (default 1.0)
+    private float[] padPan  = new float[8];   // per-pad pan (default 0.0 center)
+    // Global drum-pad master volume — applies on top of per-pad volumes.
+    // Synced with LoopsActivity.masterVolume via "loop_master_volume" prefs.
+    private float drumMasterVolume = 1.0f;
+    // Global drum-pad master pitch — applies on top of per-pad pitch (0.1–2.0x).
+    // Controllable via MIDI CC (pitch knob) and UI slider.
+    private float drumMasterPitch = 1.0f;
+    private int selectedPad = 0;
+    private boolean editMode = false;
+    private int kitIndex  = 1;   // Bank A's active kit number
+    private int kitIndexB = 1;   // Bank B's active kit number (independent of Bank A)
+    private String currentKitName  = "KIT 1";
+    private String currentKitNameB = "KIT B:1";
+    private String pendingSaveKitName = null;
+    // Guard: prevent saveKitToMemory from firing during onCreate init
+    // (before kitIndex/currentKitName are restored from prefs). Without this,
+    // initSeekBars → onProgressChanged → saveKitToMemory writes stale "KIT 1"
+    // to whichever kit slot kitIndex points at during init, corrupting the
+    // saved name on next restart.
+    private boolean initialized = false;
+
+    // ── Favorite Kit Bank (MainActivity — 10 quick slots) ─────────────────────
+    // Each slot stores Bank A kit + Bank B kit + bankMode so switching a favorite
+    // restores the exact kit setup. Persisted under favorite_drum_* keys.
+    private static final String PREF_FAV_KIT_A      = "favorite_drum_kit_A_";
+    private static final String PREF_FAV_KIT_B      = "favorite_drum_kit_B_";
+    private static final String PREF_FAV_BANK_MODE  = "favorite_drum_bank_mode_";
+    private int[] favKitA   = new int[10];
+    private int[] favKitB   = new int[10];
+    private int[] favBank   = new int[10];
+    private Button[] favDrumButtons = new Button[10];
+
+    private int copySourcePad = -1;
+    private int swapSourcePad = -1;
+    private AudioEngine.SampleData[] samples = new AudioEngine.SampleData[8];
+
+    // ── Bank B ─────────────────────────────────────────────────────────────────
+    // bankMode 0 = BANK A (default), 1 = BANK B, 2 = A+B LAYER (both play together)
+    // Bank B uses pad voice slots 8-15 in AudioEngine (PAD_COUNT = 16).
+    private static final int BANK_A   = 0;
+    private static final int BANK_B   = 1;
+    private static final int LAYER_AB = 2;
+    private int    bankMode      = BANK_A;
+    private Button btnBankA      = null;
+    private Button btnBankB      = null;
+    private Button btnBankAB     = null;
+    private Uri[]  selectedWavUrisB    = new Uri[8];
+    private int[]  selectedRawResIdsB  = new int[8];
+    private float[] padVolumeB         = new float[]{0.8f,0.8f,0.8f,0.8f,0.8f,0.8f,0.8f,0.8f};
+    private float[] padPitchB          = new float[]{1f,1f,1f,1f,1f,1f,1f,1f};
+    private boolean[] padDelayOnB      = new boolean[8];
+    private float[] padDelayTimeB      = new float[]{150f,150f,150f,150f,150f,150f,150f,150f};
+    private float[] padDelayLevelB     = new float[]{0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,0.5f};
+    private float[] padEqHighB         = new float[8];
+    private float[] padEqMidB          = new float[8];
+    private float[] padEqLowB          = new float[8];
+    private int[]   padChokeGroupB     = new int[8];
+    private float[] padGainB           = new float[8];   // Bank B per-pad gain (default 1.0)
+    private float[] padPanB            = new float[8];   // Bank B per-pad pan (center)
+    private AudioEngine.SampleData[] samplesB = new AudioEngine.SampleData[8];
+
+    private int[] activePointerId = new int[8];
+    private int currentPresetKit = 0;
+    private final String[] presetKitNames = new String[25];
+    private final int[][] presetKits = (int[][]) Array.newInstance(Integer.TYPE, 25, 8);
+    private long[] lastHitTime = new long[8];
+
+    // ── Kit hold-repeat (Roland SPD style) ────────────────────────────────────
+    private final Handler kitRepeatHandler = new Handler(Looper.getMainLooper());
+    private Runnable kitRepeatRunnable;
+
+    // ── Async kit sample loading ──────────────────────────────────────────────
+    // Kit/bank switches decode 16 WAVs (file I/O + MediaCodec) which, done on the
+    // UI thread, is the felt latency. Samples are now decoded on this single
+    // background thread; the fast native upload runs back on the main thread.
+    // kitLoadGeneration invalidates stale loads when the user switches quickly.
+    private final java.util.concurrent.ExecutorService kitLoadExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+    private volatile int kitLoadGeneration = 0;
+    // Sound references are loaded asynchronously. Keep ownership explicit so a
+    // save triggered while the next kit is still decoding cannot copy the
+    // previous kit's in-memory URIs/raw IDs into the new kit's preferences.
+    private volatile int loadedSoundKitA = -1;
+    private volatile int loadedSoundKitB = -1;
+
+    // ── CC kit-change debounce (prevents rapid pot events from cancelling loads) ─
+    private final android.os.Handler ccKitDebounceHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable ccKitDebounceRunnable;
+    private int ccKitDebounceTarget = -1;
+
+    // ── Audio-routing callbacks (earphone / BT plug-unplug) ──────────────────
+    private AudioDeviceCallback audioDeviceCallback = null;
+    private BroadcastReceiver   noisyReceiver       = null;
+
+    @Override // android.app.Activity
+    protected void onResume() {
+        super.onResume();
+        this.isVisible = true;
+        // Refresh the drum master volume from prefs — LoopsActivity may have
+        // changed it (volume knob/seekbar) while this screen was backgrounded.
+        this.drumMasterVolume = this.prefs.getFloat("loop_master_volume", 1.0f);
+        // Restore the master pitch — independent from LoopsActivity's loop pitch.
+        this.drumMasterPitch = this.prefs.getFloat("drum_master_pitch", 1.0f);
+        // Move the M-VOL / M-PITCH sliders to match (CC knob turns move them too).
+        if (this.seekMasterVolume != null) {
+            this.seekMasterVolume.setProgress((int) (this.drumMasterVolume * 100.0f));
+        }
+        if (this.seekMasterPitch != null) {
+            this.seekMasterPitch.setProgress((int) (this.drumMasterPitch * 100.0f));
+        }
+
+        // ── Force-restore the SAVED kit index on every foreground ──────────────
+        // onCreate's init order is: initPads()/initSeekBars()/setupFavorites()
+        // (defaults) THEN loadKitFromMemory() (saved values) — so defaults can
+        // never overwrite the saved kit. This extra check guarantees it regardless
+        // of init order: if prefs hold a different index than the in-memory one,
+        // trust prefs and reload. (Normal resumes are cheap — no reload when the
+        // index already matches.)
+        int savedIdx = this.prefs.getInt(KEY_KIT_INDEX, this.kitIndex);
+        int savedIdxB = this.prefs.getInt("kit_index_B", this.kitIndexB);
+        int savedMode = this.prefs.getInt("bank_mode", this.bankMode);
+        boolean kitStateStale = (savedIdx != this.kitIndex)
+                || (savedIdxB != this.kitIndexB)
+                || (savedMode != this.bankMode);
+        if (savedIdx >= 1 && savedIdx != this.kitIndex) this.kitIndex = savedIdx;
+        if (savedIdxB >= 1 && savedIdxB != this.kitIndexB) this.kitIndexB = savedIdxB;
+        if (savedMode >= BANK_A && savedMode <= LAYER_AB) this.bankMode = savedMode;
+
+        if (this.audioEngine == null) {
+            // Engine was stopped in onStop() while LoopsActivity was on screen.
+            // Recreate the engine and reload the current kit so drum pads work.
+            AudioEngine eng = new AudioEngine(this);
+            this.audioEngine = eng;
+            eng.start();
+            loadKitFromMemory(this.kitIndex);
+        } else {
+            // Normal resume (screen lock, permission dialog, etc.).
+            // Reinit Oboe stream to clear any buffer drift/underrun from background.
+            AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+            if (am != null) {
+                int nativeSR = 48000, nativeBurst = 256;
+                try {
+                    String srStr    = am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE);
+                    String burstStr = am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER);
+                    if (srStr    != null && !srStr.isEmpty())    nativeSR    = Integer.parseInt(srStr);
+                    if (burstStr != null && !burstStr.isEmpty()) nativeBurst = Integer.parseInt(burstStr);
+                    if (nativeSR < 8000 || nativeSR > 192000)   nativeSR    = 48000;
+                    if (nativeBurst < 32 || nativeBurst > 8192) nativeBurst = 256;
+                } catch (NumberFormatException ignored) {}
+                this.audioEngine.reinitStream(nativeSR, nativeBurst);
+            }
+            // Reload ONLY when the saved kit state didn't match what onCreate had
+            // loaded (init-overwrite protection). Skipped on normal resumes.
+            if (kitStateStale) {
+                loadKitFromMemory(this.kitIndex);
+            }
+        }
+    }
+
+    public void onStopLoopClick(View view) {
+        try {
+            LoopsActivity loopsActivity = LoopsActivity.globalInstance;
+            if (loopsActivity != null && loopsActivity.audioEngine != null) {
+                // Use stopAll() — same as LoopsActivity's own Stop button.
+                // This silences every voice regardless of loopPlaying state.
+                loopsActivity.audioEngine.stopAll();
+                for (int i = 0; i < 8; i++) {
+                    loopsActivity.loopPlaying[i] = false;
+                }
+                // UI (pad colours) will refresh when LoopsActivity next resumes.
+            }
+        } catch (Throwable th) {
+        }
+    }
+
+    static int access$1208(MainActivity x0) {
+        int i = x0.kitIndex;
+        x0.kitIndex = i + 1;
+        return i;
+    }
+
+    static int access$1210(MainActivity x0) {
+        int i = x0.kitIndex;
+        x0.kitIndex = i - 1;
+        return i;
+    }
+
+    private void initPresets() {
+        String[] strArr = this.presetKitNames;
+        char c = 0;
+        strArr[0] = "Intro Patch";
+        char c2 = 1;
+        strArr[1] = "Dadra Kaharwa";
+        strArr[2] = "Duff Patch";
+        strArr[3] = "Kaharwa Dadra Manjira";
+        strArr[4] = "Deepchandi Patch";
+        strArr[5] = "Bhanda Huk Patch";
+        strArr[6] = "Disco Patch";
+        strArr[7] = "Dholak Manjira Patch";
+        int i = 8;
+        strArr[8] = "Dhumal Patch";
+        strArr[9] = "Gaura Gauri Patch";
+        strArr[10] = "Tiger Dhumal Patch";
+        strArr[11] = "Groomer Patch";
+        strArr[12] = "Dandiya Patch";
+        strArr[13] = "CG Patch";
+        strArr[14] = "Jasgeet Manjira Patch";
+        strArr[15] = "Jasgeet Jhanj Patch";
+        strArr[16] = "CG Sambalpuri";
+        strArr[17] = "Panthi Patch";
+        strArr[18] = "Nagpuri Patch";
+        strArr[19] = "Percussion Patch";
+        strArr[20] = "Aana N Gori Ab";
+        strArr[21] = "Chham Chham Baje Patch";
+        strArr[22] = "CG Slow Karma Patch";
+        strArr[23] = "CG Karma Patch";
+        strArr[24] = "Drum Set Western Patch";
+        int i2 = 0;
+        while (i2 < 25) {
+            String suffix = i2 == 0 ? "" : String.valueOf(i2 + 1);
+            int[][] iArr = this.presetKits;
+            int[] iArr2 = new int[i];
+            iArr2[c] = getResources().getIdentifier("crash" + suffix, "raw", getPackageName());
+            iArr2[c2] = getResources().getIdentifier("tom" + suffix, "raw", getPackageName());
+            iArr2[2] = getResources().getIdentifier("rim" + suffix, "raw", getPackageName());
+            iArr2[3] = getResources().getIdentifier("clap" + suffix, "raw", getPackageName());
+            iArr2[4] = getResources().getIdentifier("kick" + suffix, "raw", getPackageName());
+            iArr2[5] = getResources().getIdentifier("snare" + suffix, "raw", getPackageName());
+            iArr2[6] = getResources().getIdentifier("ohat" + suffix, "raw", getPackageName());
+            iArr2[7] = getResources().getIdentifier("chat" + suffix, "raw", getPackageName());
+            iArr[i2] = iArr2;
+            i2++;
+            i = 8;
+            c = 0;
+            c2 = 1;
+        }
+    }
+
+    @Override // android.app.Activity, android.view.Window.Callback
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            hideSystemUI();
+        }
+    }
+
+    private void hideSystemUI() {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            // Android 11+ (API 30): new WindowInsetsController API
+            // setDecorFitsSystemWindows(false) → layout draws behind nav/status bars
+            getWindow().setDecorFitsSystemWindows(false);
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(android.view.WindowInsets.Type.statusBars()
+                        | android.view.WindowInsets.Type.navigationBars());
+                // BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE:
+                // swipe se temporarily dikhega, phir auto-hide ho jayega
+                controller.setSystemBarsBehavior(
+                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            // Android 6–10 (API 23–29): legacy flags
+            View decorView = getWindow().getDecorView();
+            decorView.setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN);
+        }
+    }
+
+    private void setupMidi() {
+        MidiManager midiManager = (MidiManager) getSystemService("midi");
+        this.midiManager = midiManager;
+        if (midiManager == null) {
+            return;
+        }
+        MidiDeviceInfo[] infos = midiManager.getDevices();
+        for (MidiDeviceInfo info : infos) {
+            openMidiDevice(info);
+        }
+        this.midiManager.registerDeviceCallback(new MidiManager.DeviceCallback() { // from class: com.pramod.loopmidi.MainActivity.1
+            @Override // android.media.midi.MidiManager.DeviceCallback
+            public void onDeviceAdded(MidiDeviceInfo device) {
+                MainActivity.this.openMidiDevice(device);
+            }
+
+            @Override // android.media.midi.MidiManager.DeviceCallback
+            public void onDeviceRemoved(MidiDeviceInfo device) {
+                if (MainActivity.this.openedMidiDevice != null && MainActivity.this.openedMidiDevice.getInfo().getId() == device.getId()) {
+                    try {
+                        MainActivity.this.closeMidiDevice();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    ((TextView) MainActivity.this.findViewById(R.id.txtMidiStatus)).setText("MIDI disconnected");
+                    runOnUiThread(() -> updateMidiConnectButton(false));
+                }
+            }
+        }, new Handler(Looper.getMainLooper()));
+    }
+
+    public void openMidiDevice(MidiDeviceInfo info) {
+        if (info.getOutputPortCount() > 0) {
+            this.midiManager.openDevice(info, new MidiManager.OnDeviceOpenedListener() {
+                @Override
+                public void onDeviceOpened(MidiDevice device) {
+                    if (device == null) return;
+                    MainActivity.this.openedMidiDevice = device;
+                    int portCount = device.getInfo().getOutputPortCount();
+                    // Open ALL output ports — supports multi-port MIDI devices
+                    for (int portIndex = 0; portIndex < portCount; portIndex++) {
+                        MidiOutputPort port = device.openOutputPort(portIndex);
+                        if (port == null) continue;
+                        if (MainActivity.this.midiOutputPort == null) {
+                            MainActivity.this.midiOutputPort = port;
+                        }
+                        MainActivity.this.midiOutputPorts.add(port);
+                        if (MainActivity.this.txtMidiStatus != null) {
+                            MainActivity.this.txtMidiStatus.setText("MIDI connected");
+                        }
+                        runOnUiThread(() -> updateMidiConnectButton(true));
+                        port.connect(new MidiReceiver() {
+                            @Override
+                            public void onSend(byte[] msg, int offset, int count, long timestamp) {
+                                // ── Zero-latency MIDI parser ─────────────────────────────
+                                // Runs on dedicated MIDI thread. Audio fires immediately via
+                                // playPadSoundImmediate(); UI updates posted to UI thread after.
+                                int end    = offset + count;
+                                int status = 0;
+                                int i      = offset;
+                                while (i < end) {
+                                    int val = msg[i] & 0xFF;
+                                    if (val >= 0x80) {
+                                        // Status byte — update running status and advance
+                                        status = val;
+                                        i++;
+                                        continue;
+                                    }
+                                    int type = status & 0xF0;
+                                    if (type == 0x90) {
+                                        // Note-On (0x9n channel message)
+                                        if (i + 1 >= end) return;
+                                        byte note     = (byte) val;
+                                        int  velocity = msg[i + 1] & 0xFF;
+                                        if (velocity > 0) {
+                                            MainActivity.this.handleMidiNoteOn(note, (byte) velocity);
+                                        } else {
+                                            // velocity == 0 is a Note-Off in disguise
+                                            MainActivity.this.handleMidiNoteOff(note);
+                                        }
+                                        i += 2;
+                                    } else if (type == 0x80) {
+                                        // Note-Off (0x8n channel message)
+                                        if (i + 1 >= end) return;
+                                        byte note = (byte) val;
+                                        MainActivity.this.handleMidiNoteOff(note);
+                                        i += 2;
+                                    } else if (type == 0xB0) {
+                                        // ── Control Change (CC) — Roland SPD-20 Pro controls ──
+                                        if (i + 1 < end) {
+                                            int ccNum  = val;
+                                            int ccVal2 = msg[i + 1] & 0xFF;
+                                            MainActivity.this.handleMidiCC(ccNum, ccVal2);
+                                            i += 2;
+                                        } else { i++; }
+                                    } else if (type == 0xC0) {
+                                        // Program Change → drum kit change
+                                        int prog = val;
+                                        MainActivity.this.handleProgramChangeMain(prog);
+                                        i++;
+                                    } else {
+                                        // Pitch Bend, SysEx, etc. — skip data byte
+                                        i++;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }, new Handler(Looper.getMainLooper()));
+        }
+    }
+
+    public void closeMidiDevice() throws IOException {
+        try {
+            Iterator<MidiOutputPort> it = this.midiOutputPorts.iterator();
+            while (it.hasNext()) {
+                MidiOutputPort port = it.next();
+                if (port != null) {
+                    port.close();
+                }
+            }
+            this.midiOutputPorts.clear();
+            MidiDevice midiDevice = this.openedMidiDevice;
+            if (midiDevice != null) {
+                midiDevice.close();
+                this.openedMidiDevice = null;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void handleMidiNoteOn(byte note, byte velocity) {
+        // ── MIDI Kit Lock filter ──────────────────────────────────────────────
+        // When lock is ON, only the locked SPD-20 Pro kit should trigger app playback.
+        // All other kits are ignored, even if a different kit is currently selected.
+        if (MidiPlaybackPolicy.shouldBlockMidiPlaybackForLockedKit(midiKitLockNumber, currentSpdKitNum)) {
+            return;  // Lock ON: sirf locked kit se app play karo
+        }
+
+        // ── MIDI Learn: capture incoming note for the pad being learned ────────
+        if (midiLearnMode && midiLearnTargetPad >= 0) {
+            final int learnPad  = midiLearnTargetPad;
+            final int learnNote = note & 0xFF;
+            midiLearnMode      = false;
+            midiLearnTargetPad = -1;
+            midiNoteMap[learnPad] = learnNote;
+            saveMidiNoteMap();
+            runOnUiThread(() -> {
+                Toast.makeText(this,
+                    "PAD " + (learnPad + 1) + " → Note " + learnNote + " mapped! ✅",
+                    Toast.LENGTH_SHORT).show();
+                updateMidiMapButton();
+            });
+        }
+
+        if (this.isVisible) {
+            int padIndex = -1;
+
+            // ── Key Map: scan midiNoteMap[] for a match ────────────────────
+            int noteVal = note & 0xFF;
+            for (int i = 0; i < 8; i++) {
+                if (midiNoteMap[i] == noteVal) { padIndex = i; break; }
+            }
+            if (padIndex == -1) return; // note map mein match nahi — trigger mat karo
+            final int finalPadIndex = padIndex;
+            // ── Velocity scale: 30% min (soft) → 100% (hard) musical curve ──
+            final float velScale = velocitySensitiveMode
+                    ? Math.min(1.4f, 0.2f + 1.2f * ((velocity & 0xFF) / 127.0f))
+                    : 1.0f;
+            playPadSoundImmediate(finalPadIndex, velScale);
+            runOnUiThread(new Runnable() { // from class: com.pramod.loopmidi.MainActivity.3
+
+
+                @Override // java.lang.Runnable
+                public void run() {
+                    try {
+                        MainActivity.this.pads[finalPadIndex].setPressed(true);
+                    } catch (Exception e) {
+                    }
+                    Handler handler = new Handler(Looper.getMainLooper());
+                    final int i = finalPadIndex;
+                    handler.postDelayed(new Runnable() { // from class: com.pramod.loopmidi.MainActivity.3.1
+
+
+                        @Override // java.lang.Runnable
+                        public void run() {
+                            try {
+                                MainActivity.this.pads[i].setPressed(false);
+                            } catch (Exception e2) {
+                            }
+                        }
+                    }, 100L);
+                }
+            });
+        }
+    }
+
+    /**
+     * Handle MIDI Note-Off.
+     *
+     * Intentionally a no-op: pads here are one-shot hits that must ring out
+     * fully once triggered, exactly like a finger tap. A MIDI pad controller
+     * sends Note-Off almost immediately after Note-On (as soon as the
+     * physical pad is released) — that is normal and NOT a signal to cut the
+     * sample, but this previously called audioEngine.stopPad() unconditionally
+     * on every Note-Off, which chopped off drum-roll hits and any pad with a
+     * longer sample as soon as the controller released. Only happened over
+     * MIDI since touch input has no separate "release" event — same root
+     * cause and fix as LoopsActivity.handleMidiNoteOff().
+     */
+    public void handleMidiNoteOff(byte note) {
+        // No-op — see javadoc above.
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MIDI CC (Control Change) — Roland SPD-20 Pro drum-pad controls
+    //
+    // Default mapping (shares same SharedPrefs keys as LoopsActivity):
+    //   CC  7  → Volume (absolute) (delegates to LoopsActivity volume)
+    //   CC 20  → Tempo (absolute)  (delegates to LoopsActivity seekTempo)
+    //   CC 21  → Pitch   (delegates to LoopsActivity seekPitch)
+    //   CC 22  → Kit (absolute) (delegates to LoopsActivity loop channel)
+    //   CC 123 → Stop All drums immediately
+    //   CC 24  → Kit Prev (Bank A)
+    //   CC 25  → Kit Next (Bank A)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /** Open the MIDI CC → Global Controls mapping dialog with live LEARN support. */
+    private void showMidiCCControlDialog() {
+        midiCCControlLearnMode = false;
+        midiCCControlLearnKey  = null;
+
+        android.widget.LinearLayout root = new android.widget.LinearLayout(this);
+        root.setOrientation(android.widget.LinearLayout.VERTICAL);
+        root.setPadding(28, 20, 28, 12);
+        root.setBackgroundColor(0xFF1A1A1A);
+
+        android.widget.TextView title = new android.widget.TextView(this);
+        title.setText("🎛️ MIDI CC → App Controls");
+        title.setTextColor(0xFFFFCC00);
+        title.setTextSize(15f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        root.addView(title);
+
+        android.widget.TextView sub = new android.widget.TextView(this);
+        sub.setText("LEARN dabao → Roland SPD-20 Pro ka button dabao → auto-map! ✅");
+        sub.setTextColor(0xFFAAAAAA);
+        sub.setTextSize(10f);
+        sub.setPadding(0, 4, 0, 14);
+        root.addView(sub);
+
+        final String[] labels = {"🔊 Volume (absolute)",
+                                  "⏱ Tempo (absolute)",
+                                  "🎵 Pitch (absolute)",
+                                  "🎛 Kit (absolute)",
+                                  "🔊➖ Volume −1",        "🔊➕ Volume +1",
+                                  "⏱➖ Tempo −1",         "⏱➕ Tempo +1",
+                                  "🎵➖ Pitch −1",         "🎵➕ Pitch +1",
+                                  "⏹ Stop All",            "⏮ Kit −1 (Prev)",       "⏭ Kit +1 (Next)",
+                                  "🔌 MIDI Connect"};
+        final String[] keys   = {"midi_cc_volume",
+                                  "midi_cc_tempo",
+                                  "midi_cc_pitch",
+                                  "midi_cc_kit",
+                                  "midi_cc_volume_minus",    "midi_cc_volume_plus",
+                                  "midi_cc_tempo_minus",     "midi_cc_tempo_plus",
+                                  "midi_cc_pitch_minus",     "midi_cc_pitch_plus",
+                                  "midi_cc_stop",            "midi_cc_kit_prev",        "midi_cc_kit_next",
+                                  "midi_cc_connect_toggle"};
+        final int[]    defs   = {7, 20, 21, 22, 80, 81, 82, 83, 84, 85, 123, 24, 25, 26};
+
+        final android.widget.TextView[] valViews  = new android.widget.TextView[labels.length];
+        final Button[]                  learnBtns = new Button[labels.length];
+        midiCCCtrlKeys      = keys;
+        midiCCCtrlValViews  = valViews;
+        midiCCCtrlLearnBtns = learnBtns;
+
+        for (int i = 0; i < labels.length; i++) {
+            final int    idx = i;
+            final String key = keys[i];
+
+            android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            row.setPadding(0, 5, 0, 5);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
+            android.widget.TextView lbl = new android.widget.TextView(this);
+            lbl.setText(labels[i]);
+            lbl.setTextColor(0xFFDDDDDD);
+            lbl.setTextSize(12f);
+            lbl.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+                0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1.5f));
+            row.addView(lbl);
+
+            android.widget.TextView valView = new android.widget.TextView(this);
+            valView.setText("CC:" + prefs.getInt(key, defs[i]));
+            valView.setTextColor(0xFF00FF88);
+            valView.setTextSize(12f);
+            valView.setTypeface(null, android.graphics.Typeface.BOLD);
+            valView.setGravity(android.view.Gravity.CENTER);
+            valView.setLayoutParams(new android.widget.LinearLayout.LayoutParams(
+                0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 0.6f));
+            valViews[idx] = valView;
+            row.addView(valView);
+
+            Button lb = new Button(this);
+            lb.setText("LEARN");
+            lb.setTextSize(9f);
+            lb.setTextColor(0xFFFFFFFF);
+            lb.setBackgroundColor(0xFF334466);
+            android.widget.LinearLayout.LayoutParams lbLp =
+                new android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+            lbLp.setMargins(6, 0, 0, 0);
+            lb.setLayoutParams(lbLp);
+            learnBtns[idx] = lb;
+
+            lb.setOnClickListener(vv -> {
+                midiCCControlLearnMode = false;
+                midiCCControlLearnKey  = null;
+                for (Button b : learnBtns) {
+                    if (b != null) { b.setBackgroundColor(0xFF334466); b.setText("LEARN"); }
+                }
+                midiCCControlLearnMode = true;
+                midiCCControlLearnKey  = key;
+                lb.setBackgroundColor(0xFFFF6600);
+                lb.setText("⏳SPD...");
+            });
+            row.addView(lb);
+            root.addView(row);
+        }
+
+        android.widget.TextView hint = new android.widget.TextView(this);
+        hint.setText("Absolute CC 0-127: Volume=7  Tempo=20  Pitch=21  Kit=22\n"
+                + "Stop=123  Connect=26\n"
+                + "+/- (1 step): Vol-=80 Vol+=81  Tempo-=82 Tempo+=83  Pitch-=84 Pitch+=85\n"
+                + "Kit: Prev(−1)=24  Next(+1)=25 — har ek press = 1 kit change");
+        hint.setTextColor(0xFF666666);
+        hint.setTextSize(9f);
+        hint.setPadding(0, 12, 0, 0);
+        root.addView(hint);
+
+        // ── MIDI Kit Lock Section ─────────────────────────────────────────────
+        android.widget.TextView divider = new android.widget.TextView(this);
+        divider.setText("──────────────────────────────");
+        divider.setTextColor(0xFF444444);
+        divider.setTextSize(10f);
+        divider.setPadding(0, 16, 0, 4);
+        root.addView(divider);
+
+        android.widget.TextView lockTitle = new android.widget.TextView(this);
+        lockTitle.setText("🎯 SPD-20 Pro Kit Lock");
+        lockTitle.setTextColor(0xFFFFCC00);
+        lockTitle.setTextSize(13f);
+        lockTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        root.addView(lockTitle);
+
+        android.widget.TextView lockDesc = new android.widget.TextView(this);
+        lockDesc.setText(
+            "✅ Sirf LOCKED kit pe app ke pads trigger honge\n" +
+            "❌ Baki sabhi SPD-20 kits pe app chup rahega\n" +
+            "   (SPD-20 apni original sounds bajata rahega)\n\n" +
+            "SPD-20 pe us kit pe jao → LOCK dabao\n" +
+            "Ya seedha kit number type karo neeche 👇");
+        lockDesc.setTextColor(0xFFAAAAAA);
+        lockDesc.setTextSize(10f);
+        lockDesc.setPadding(0, 4, 0, 8);
+        root.addView(lockDesc);
+
+        // ── Manual kit number row ─────────────────────────────────────────────
+        android.widget.LinearLayout kitNumRow = new android.widget.LinearLayout(this);
+        kitNumRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        kitNumRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        android.widget.LinearLayout.LayoutParams kitNumRowLp =
+            new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        kitNumRowLp.setMargins(0, 0, 0, 8);
+        kitNumRow.setLayoutParams(kitNumRowLp);
+
+        android.widget.TextView kitNumLabel = new android.widget.TextView(this);
+        kitNumLabel.setText("Kit No. (1–128):  ");
+        kitNumLabel.setTextColor(0xFFCCCCCC);
+        kitNumLabel.setTextSize(12f);
+        kitNumRow.addView(kitNumLabel);
+
+        final android.widget.EditText etKitNum = new android.widget.EditText(this);
+        etKitNum.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        etKitNum.setTextColor(0xFFFFFFFF);
+        etKitNum.setBackgroundColor(0xFF333333);
+        etKitNum.setPadding(12, 4, 12, 4);
+        etKitNum.setHint(midiKitLockNumber != -1
+            ? String.valueOf(midiKitLockNumber) : (currentSpdKitNum != -1
+                ? String.valueOf(currentSpdKitNum) : "e.g. 3"));
+        etKitNum.setHintTextColor(0xFF888888);
+        android.widget.LinearLayout.LayoutParams etLp =
+            new android.widget.LinearLayout.LayoutParams(180,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        etKitNum.setLayoutParams(etLp);
+        kitNumRow.addView(etKitNum);
+
+        Button btnSetKit = new Button(this);
+        btnSetKit.setText("SET");
+        btnSetKit.setTextColor(0xFFFFFFFF);
+        btnSetKit.setBackgroundColor(0xFF005599);
+        btnSetKit.setTextSize(11f);
+        android.widget.LinearLayout.LayoutParams setLp =
+            new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        setLp.setMargins(8, 0, 0, 0);
+        btnSetKit.setLayoutParams(setLp);
+        kitNumRow.addView(btnSetKit);
+        root.addView(kitNumRow);
+
+        // Lock toggle button — state current lock ke hisaab se dikhai deta hai
+        btnKitLock = new Button(this);
+        final boolean lockIsOn = (midiKitLockNumber != -1);
+        if (lockIsOn) {
+            final boolean onKit = (currentSpdKitNum == midiKitLockNumber || currentSpdKitNum == -1);
+            btnKitLock.setBackgroundColor(onKit ? 0xFF006600 : 0xFFAA4400);
+            btnKitLock.setText(onKit
+                ? "🔒 LOCKED: SPD Kit " + midiKitLockNumber + " ✅  |  UNLOCK karne ke liye dabao"
+                : "🔒 LOCKED: SPD Kit " + midiKitLockNumber + " ❌ (SPD Kit " + currentSpdKitNum + " pe) | UNLOCK");
+        } else {
+            btnKitLock.setBackgroundColor(0xFF334466);
+            btnKitLock.setText("🔓 LOCK: Abhi wali SPD Kit ko lock karo");
+        }
+        btnKitLock.setTextColor(0xFFFFFFFF);
+        btnKitLock.setTextSize(11f);
+        android.widget.LinearLayout.LayoutParams lockLp =
+            new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        lockLp.setMargins(0, 0, 0, 6);
+        btnKitLock.setLayoutParams(lockLp);
+
+        // SET button: directly set a kit number without needing Program Change
+        btnSetKit.setOnClickListener(sv2 -> {
+            String txt = etKitNum.getText().toString().trim();
+            if (txt.isEmpty()) {
+                android.widget.Toast.makeText(this,
+                    "⚠️ Kit number daalo (1–128)", android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            int num;
+            try { num = Integer.parseInt(txt); } catch (NumberFormatException e) { num = -1; }
+            if (num < 1 || num > 128) {
+                android.widget.Toast.makeText(this,
+                    "⚠️ Valid kit number 1–128 daalo",
+                    android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            midiKitLockNumber = num;
+            prefs.edit().putInt("midi_kit_lock", midiKitLockNumber).apply();
+            btnKitLock.setBackgroundColor(0xFF006600);
+            btnKitLock.setText("🔒 LOCKED: SPD Kit " + midiKitLockNumber +
+                " ✅  |  UNLOCK karne ke liye dabao");
+            etKitNum.setText("");
+            etKitNum.setHint(String.valueOf(midiKitLockNumber));
+            android.widget.Toast.makeText(this,
+                "🔒 SPD Kit " + midiKitLockNumber + " LOCKED!\n" +
+                "Sirf is kit pe app ke pads trigger honge.",
+                android.widget.Toast.LENGTH_SHORT).show();
+        });
+
+        btnKitLock.setOnClickListener(lockView -> {
+            if (midiKitLockNumber != -1) {
+                // ── Lock OFF → unlock karo ───────────────────────────────────
+                midiKitLockNumber = -1;
+                prefs.edit().putInt("midi_kit_lock", -1).apply();
+                btnKitLock.setBackgroundColor(0xFF334466);
+                btnKitLock.setText("🔓 LOCK: Abhi wali SPD Kit ko lock karo");
+                android.widget.Toast.makeText(this,
+                    "🔓 Kit Lock OFF — sabhi SPD kits pe app trigger hoga",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            } else {
+                // ── Lock ON → current SPD kit lock karo ─────────────────────
+                int kitToLock = currentSpdKitNum;
+                if (kitToLock == -1) {
+                    android.widget.Toast.makeText(this,
+                        "⚠️ SPD-20 Pro pe pehle kit change karo\n" +
+                        "ya ऊपर kit number type karke SET dabao.",
+                        android.widget.Toast.LENGTH_LONG).show();
+                    return;
+                }
+                midiKitLockNumber = kitToLock;
+                prefs.edit().putInt("midi_kit_lock", midiKitLockNumber).apply();
+                btnKitLock.setBackgroundColor(0xFF006600);
+                btnKitLock.setText("🔒 LOCKED: SPD Kit " + midiKitLockNumber +
+                    " ✅  |  UNLOCK karne ke liye dabao");
+                android.widget.Toast.makeText(this,
+                    "🔒 SPD Kit " + midiKitLockNumber + " LOCKED!\n" +
+                    "Sirf is kit pe app ke pads trigger honge.",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
+        root.addView(btnKitLock);
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(root);
+
+        midiCCCtrlDialog = new android.app.AlertDialog.Builder(this)
+            .setTitle("🎛️ CC → Controls")
+            .setView(sv)
+            .setNeutralButton("Reset Defaults", (d, w) -> {
+                midiCCControlLearnMode = false;
+                midiCCControlLearnKey  = null;
+                android.content.SharedPreferences.Editor ed2 = prefs.edit();
+                for (int i = 0; i < keys.length; i++) ed2.putInt(keys[i], defs[i]);
+                ed2.apply();
+                android.widget.Toast.makeText(this,
+                    "Reset to defaults ✅", android.widget.Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("Close", (d, w) -> {
+                midiCCControlLearnMode = false;
+                midiCCControlLearnKey  = null;
+            })
+            .setOnDismissListener(d -> {
+                midiCCControlLearnMode = false;
+                midiCCControlLearnKey  = null;
+                midiCCCtrlDialog    = null;
+                midiCCCtrlValViews  = null;
+                midiCCCtrlLearnBtns = null;
+                midiCCCtrlKeys      = null;
+            })
+            .show();
+    }
+
+    /**
+     * Handle MIDI Control Change from Roland SPD-20 Pro in drum-pad screen.
+     * For Volume/Tempo/Pitch, delegates to LoopsActivity if it is alive
+     * (drum pad runs on top of LoopsActivity). Stop All works locally.
+     */
+    public void handleMidiCC(int cc, int value) {
+        // Read stop/connect CC numbers up-front — the dual-receiver guard below
+        // needs them before the main dispatch block.
+        int ccStop       = prefs.getInt("midi_cc_stop",          123);
+        int ccMidiToggle = prefs.getInt("midi_cc_connect_toggle", 26);
+
+        // ── Dual-receiver guard ───────────────────────────────────────────────
+        // Both activities hold open MIDI ports on the same device, so EVERY CC
+        // reaches this receiver even when MainActivity is in the background
+        // (LoopsActivity on top). Skip non-essential handling here when hidden —
+        // the visible activity's own receiver already processed this CC.
+        // Stop All + MIDI Connect stay global so hardware buttons work everywhere.
+        if (!this.isVisible && cc != ccStop && cc != ccMidiToggle) return;
+
+        // ── CC Control Learn (Vol/Tempo/Pitch/Stop/KitPrev/KitNext/Connect) ───
+        if (midiCCControlLearnMode && midiCCControlLearnKey != null) {
+            final String lKey = midiCCControlLearnKey;
+            final int    lCC  = cc;
+            midiCCControlLearnMode = false;
+            midiCCControlLearnKey  = null;
+            prefs.edit().putInt(lKey, lCC).apply();
+            runOnUiThread(() -> {
+                if (midiCCCtrlKeys != null) {
+                    for (int ki = 0; ki < midiCCCtrlKeys.length; ki++) {
+                        if (lKey.equals(midiCCCtrlKeys[ki])) {
+                            if (midiCCCtrlValViews  != null && midiCCCtrlValViews[ki]  != null)
+                                midiCCCtrlValViews[ki].setText("CC:" + lCC);
+                            if (midiCCCtrlLearnBtns != null && midiCCCtrlLearnBtns[ki] != null) {
+                                midiCCCtrlLearnBtns[ki].setBackgroundColor(0xFF005500);
+                                midiCCCtrlLearnBtns[ki].setText("✅" + lCC);
+                            }
+                            break;
+                        }
+                    }
+                }
+                String name = lKey.replace("midi_cc_","").replace("_"," ")
+                                  .toUpperCase(java.util.Locale.US);
+                android.widget.Toast.makeText(this,
+                    "✅ CC " + lCC + " → " + name + " saved!",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            });
+            return;
+        }
+
+        // ── CC Learn mode (captures any CC → assigns to pad) ──────────────────
+        if (midiCCLearnMode && midiCCLearnTargetPad >= 0) {
+            final int lp  = midiCCLearnTargetPad;
+            final int lcc = cc;
+            midiCCLearnMode      = false;
+            midiCCLearnTargetPad = -1;
+            midiCCPadMap[lp]     = lcc;
+            saveMidiCCPadMap();
+            runOnUiThread(() -> android.widget.Toast.makeText(this,
+                "PAD " + (lp + 1) + " → CC " + lcc + " mapped! ✅",
+                android.widget.Toast.LENGTH_SHORT).show());
+            return;
+        }
+
+        int ccVolume     = prefs.getInt("midi_cc_volume",           7);
+        int ccTempo      = prefs.getInt("midi_cc_tempo",           20);
+        int ccPitch      = prefs.getInt("midi_cc_pitch",            21);
+        int ccKit        = prefs.getInt("midi_cc_kit",              22);
+        int ccKitPrev    = prefs.getInt("midi_cc_kit_prev",       24);
+        int ccKitNext    = prefs.getInt("midi_cc_kit_next",       25);
+
+        if (cc == ccStop) {
+            // Stop all drum sounds immediately on MIDI thread
+            if (this.audioEngine != null) this.audioEngine.stopAll();
+            LoopsActivity loops = LoopsActivity.globalInstance;
+            if (loops != null && loops.audioEngine != null) {
+                loops.audioEngine.stopAll();
+            }
+
+        } else if (cc == ccMidiToggle && value >= 64) {
+            // ── SPD-20 Pro button → connect / disconnect MIDI live ─────────────
+            runOnUiThread(this::toggleMidiConnection);
+
+        } else if (cc == ccVolume
+                || cc == ccTempo
+                || cc == ccPitch
+                || cc == ccKit
+                || cc == prefs.getInt("midi_cc_pitch_minus",   84)
+                || cc == prefs.getInt("midi_cc_pitch_plus",    85)
+                || cc == prefs.getInt("midi_cc_volume_minus",  80)
+                || cc == prefs.getInt("midi_cc_volume_plus",   81)
+                || cc == prefs.getInt("midi_cc_tempo_minus",   82)
+                || cc == prefs.getInt("midi_cc_tempo_plus",    83)) {
+            // Delegate to LoopsActivity (controls background loops).
+            LoopsActivity loops = LoopsActivity.globalInstance;
+            if (loops != null) loops.handleMidiCC(cc, value);
+            // ALWAYS apply volume/kit to THIS screen's drum-pad engine:
+            // - Volume: pad sounds use their own AudioEngine; masterVolume
+            //   from LoopsActivity doesn't affect them without this.
+            // - Kit: selecting a drum kit on the pad screen is useful even
+            //   when LoopsActivity is alive (it manages loop channels,
+            //   not drum kits).
+            applyGlobalCCLocally(cc, value);
+
+        } else if (cc == ccKitPrev
+                && (System.currentTimeMillis() - ccStepDebounceMs[cc] > 100)) {
+            ccStepDebounceMs[cc] = System.currentTimeMillis();
+            // Kit Prev — bank-aware: Bank B mode changes Bank B's kit (kitIndexB),
+            // otherwise Bank A's (kitIndex). changeKitBy also updates txtKitName.
+            runOnUiThread(() -> changeKitBy(-1));
+
+        } else if (cc == ccKitNext
+                && (System.currentTimeMillis() - ccStepDebounceMs[cc] > 100)) {
+            ccStepDebounceMs[cc] = System.currentTimeMillis();
+            // Kit Next — bank-aware (see changeKitBy).
+            runOnUiThread(() -> changeKitBy(+1));
+
+        } else {
+            // ── CC → Pad trigger (user-defined CC-to-pad mapping) ─────────────
+            // Kit Lock guard: agar lock ON hai aur SPD wrong kit pe hai → block
+            if (MidiPlaybackPolicy.shouldBlockMidiPlaybackForLockedKit(midiKitLockNumber, currentSpdKitNum)) {
+                return;
+            }
+            if (value > 0) {
+                for (int i = 0; i < 8; i++) {
+                    if (midiCCPadMap[i] >= 0 && cc == midiCCPadMap[i]) {
+                        final float velScale = velocitySensitiveMode
+                                ? Math.min(1.4f, 0.2f + 1.2f * (value / 127.0f))
+                                : 1.0f;
+                        playPadSoundImmediate(i, velScale);
+                        final int padIdx = i;
+                        runOnUiThread(() -> {
+                            android.view.View pad = findViewById(getPadResId(padIdx));
+                            if (pad != null) {
+                                pad.setPressed(true);
+                                new android.os.Handler(android.os.Looper.getMainLooper())
+                                    .postDelayed(() -> pad.setPressed(false), 100);
+                            }
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Local handling of the "global" CC controls on the drum-pad screen.
+     * Runs after the LoopsActivity delegation so the SPD-20 knobs are heard
+     * HERE even when LoopsActivity is dead (direct drum-pad launch) or when
+     * it only manages loops. Volume scales this screen's own drum engine via
+     * {@link #drumMasterVolume}; Kit selects a drum kit.
+     */
+    private void applyGlobalCCLocally(int cc, int value) {
+        try {
+            int ccVolume   = prefs.getInt("midi_cc_volume",  7);
+            int ccVolMinus = prefs.getInt("midi_cc_volume_minus", 80);
+            int ccVolPlus  = prefs.getInt("midi_cc_volume_plus",  81);
+            int ccKitAbs   = prefs.getInt("midi_cc_kit",     22);
+            int ccPitch    = prefs.getInt("midi_cc_pitch",   21);
+            int ccPitchMinus = prefs.getInt("midi_cc_pitch_minus", 84);
+            int ccPitchPlus  = prefs.getInt("midi_cc_pitch_plus",  85);
+
+            if (cc == ccVolume) {
+                // Absolute Volume: CC 0-127 → 0%-100% (matches LoopsActivity).
+                drumMasterVolume = Math.max(0f, Math.min(1f, value / 127f));
+            } else if (cc == ccVolMinus) {
+                drumMasterVolume = Math.max(0f, drumMasterVolume - 0.01f);
+            } else if (cc == ccVolPlus) {
+                drumMasterVolume = Math.min(1f, drumMasterVolume + 0.01f);
+            } else if (cc == ccKitAbs) {
+                // Absolute Kit: CC 0-127 selects drum kit 1-100 (same mapping
+                // as the loop channel). Debounce the actual load so a sweeping
+                // pot doesn't keep invalidating the background sample load
+                // (kitLoadGeneration) before it can finish — without this the
+                // kit NAME updates instantly but the pad SOUNDS stay old.
+                final int target = 1 + Math.round(value * (MAX_KITS - 1) / 127f);
+                if (target >= 1 && target <= MAX_KITS && target != kitIndex) {
+                    ccKitDebounceTarget = target;
+                    if (ccKitDebounceRunnable != null) {
+                        ccKitDebounceHandler.removeCallbacks(ccKitDebounceRunnable);
+                    }
+                    ccKitDebounceRunnable = () -> {
+                        int t = ccKitDebounceTarget;
+                        ccKitDebounceTarget = -1;
+                        ccKitDebounceRunnable = null;
+                        if (t >= 1 && t <= MAX_KITS && t != kitIndex) {
+                            saveKitToMemory(kitIndex);
+                            kitIndex = t;
+                            prefs.edit().putInt(KEY_KIT_INDEX, kitIndex).commit();
+                            loadKitFromMemory(kitIndex);   // updates txtKitName + reloads pad samples
+                        }
+                    };
+                    ccKitDebounceHandler.postDelayed(ccKitDebounceRunnable, 150);
+                }
+                return;
+            } else if (cc == ccPitch) {
+                // Absolute Pitch: CC 0-127 → 0.1x-2.0x (matches LoopsActivity's
+                // currentPitch mapping). Applies to ALL drum pads here.
+                drumMasterPitch = Math.max(0.1f, Math.min(2.0f, value * 2f / 127f));
+            } else if (cc == ccPitchMinus) {
+                drumMasterPitch = Math.max(0.1f, drumMasterPitch - 0.01f);
+            } else if (cc == ccPitchPlus) {
+                drumMasterPitch = Math.min(2.0f, drumMasterPitch + 0.01f);
+            } else {
+                // Tempo has no drum-pad equivalent (pads are one-shot)
+                // — LoopsActivity delegation above already covered it.
+                return;
+            }
+            prefs.edit().putFloat("loop_master_volume", drumMasterVolume)
+                    .putFloat("drum_master_pitch", drumMasterPitch).apply();
+            // Move the M-VOL / M-PITCH sliders live so the hardware knob visibly
+            // tracks on this screen (CC runs on the MIDI thread → post to main).
+            runOnUiThread(() -> {
+                if (seekMasterVolume != null) {
+                    seekMasterVolume.setProgress((int) (drumMasterVolume * 100.0f));
+                }
+                if (seekMasterPitch != null) {
+                    seekMasterPitch.setProgress((int) (drumMasterPitch * 100.0f));
+                }
+            });
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private int getPadResId(int padIdx) {
+        int[] ids = {R.id.pad1, R.id.pad2, R.id.pad3, R.id.pad4,
+                     R.id.pad5, R.id.pad6, R.id.pad7, R.id.pad8};
+        return (padIdx >= 0 && padIdx < 8) ? ids[padIdx] : -1;
+    }
+
+    /**
+     * Handle MIDI Program Change in the drum-pad screen.
+     * Program number (0-based) → switches Bank A to that kit index (1-based).
+     */
+    public void handleProgramChangeMain(int program) {
+        final int newKit = program + 1; // MIDI programs are 0-based
+
+        // ── Kit Lock: SPD-20 Pro ka current kit track karo ───────────────────
+        // Hamesha update karo (visibility se nahi banta) taaki lock check
+        // sahi rahe jab activity dobara visible ho.
+        currentSpdKitNum = newKit;
+
+        // ── Independent activity routing ──────────────────────────────────────
+        // Sirf wahi activity apna kit badle jo abhi screen pe dikh rahi ho.
+        // Agar MainActivity background me hai to kit change ignore karo;
+        // LoopsActivity apna khud ka kit apni visibility ke hisaab se sambhalegi.
+        // Kit Lock UI update: lock button ka color batata hai SPD ka current kit
+        if (midiKitLockNumber != -1) {
+            final boolean onLockedKit = (newKit == midiKitLockNumber);
+            runOnUiThread(() -> {
+                if (btnKitLock != null) {
+                    if (onLockedKit) {
+                        btnKitLock.setBackgroundColor(0xFF006600);
+                        btnKitLock.setText("🔒 LOCKED: SPD Kit " + midiKitLockNumber + " ✅ (App bajega)");
+                    } else {
+                        btnKitLock.setBackgroundColor(0xFFAA4400);
+                        btnKitLock.setText("🔒 LOCKED: SPD Kit " + midiKitLockNumber + " ❌ (Kit " + newKit + " pe)");
+                    }
+                }
+            });
+        }
+        // Program Change se kit change nahi hoga — sirf CC map se kit badlega.
+    }
+
+    private void playPadSoundImmediate(int index) {
+        playPadSoundImmediate(index, 1.0f);
+    }
+
+    /**
+     * Fires pad audio immediately on calling thread (MIDI or UI).
+     * @param velocityScale 0.3–1.0 when velocity-sensitive, always 1.0 when OFF.
+     */
+    private void playPadSoundImmediate(int index, float velocityScale) {
+        try {
+            // Bank A: plays when bankMode is BANK_A or LAYER_AB
+            if (bankMode != BANK_B) {
+                AudioEngine.SampleData sampleData = this.samples[index];
+                if (sampleData != null && sampleData.loaded) {
+                    float vol = this.padVolume[index] * this.padGain[index] * velocityScale * this.drumMasterVolume;
+                    // Pass the selected choke group through to native playback. A group
+                    // value of 0 means "no choke"; matching non-zero groups stop the
+                    // previous drum voice before this hit starts.
+                    this.audioEngine.playSample(index, sampleData, vol, 1.0f, this.padPitch[index] * this.drumMasterPitch, 0,
+                        this.padDelayOn[index], this.padDelayTime[index], this.padDelayLevel[index],
+                        this.padEqLow[index], this.padEqMid[index], this.padEqHigh[index],
+                        this.padChokeGroup[index], 0.0f, 0.0f, this.padPan[index]);
+                }
+            }
+            // Bank B: plays when bankMode is BANK_B or LAYER_AB — uses voice slots 8-15
+            if (bankMode != BANK_A) {
+                AudioEngine.SampleData sampleDataB = this.samplesB[index];
+                if (sampleDataB != null && sampleDataB.loaded) {
+                    float volB = this.padVolumeB[index] * this.padGainB[index] * velocityScale * this.drumMasterVolume;
+                    this.audioEngine.playSample(index + 8, sampleDataB, volB, 1.0f, this.padPitchB[index] * this.drumMasterPitch, 0,
+                        this.padDelayOnB[index], this.padDelayTimeB[index], this.padDelayLevelB[index],
+                        this.padEqLowB[index], this.padEqMidB[index], this.padEqHighB[index],
+                        this.padChokeGroupB[index], 0.0f, 0.0f, this.padPanB[index]);
+                }
+            }
+        } catch (Exception e) {
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MIDI Key Mapping helpers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private void loadMidiNoteMap() {
+        midiKeyMappingEnabled = prefs.getBoolean("midi_key_mapping_on", false);
+        for (int i = 0; i < 8; i++) {
+            midiNoteMap[i] = prefs.getInt("midi_note_map_" + i, MIDI_NOTE_MAP_DEFAULT[i]);
+        }
+    }
+
+    private void saveMidiNoteMap() {
+        SharedPreferences.Editor ed = prefs.edit();
+        ed.putBoolean("midi_key_mapping_on", midiKeyMappingEnabled);
+        for (int i = 0; i < 8; i++) ed.putInt("midi_note_map_" + i, midiNoteMap[i]);
+        ed.apply();
+    }
+
+    private void updateMidiMapButton() {
+        if (btnMidiMap == null) return;
+        midiLearnMode = false;
+        if (midiKeyMappingEnabled) {
+            btnMidiMap.setText("🎹MAP\nON");
+            btnMidiMap.setBackgroundResource(R.drawable.btn_3d_orange);
+        } else {
+            btnMidiMap.setText("🎹MAP\nOFF");
+            btnMidiMap.setBackgroundResource(R.drawable.btn_3d_dark);
+        }
+    }
+
+    // ── MIDI CC → Pad map helpers ─────────────────────────────────────────────
+
+    private void loadMidiCCPadMap() {
+        for (int i = 0; i < 8; i++) {
+            midiCCPadMap[i] = prefs.getInt("midi_cc_pad_" + i, MIDI_CC_PAD_DEFAULT[i]);
+        }
+    }
+
+    private void saveMidiCCPadMap() {
+        SharedPreferences.Editor ed = prefs.edit();
+        for (int i = 0; i < 8; i++) ed.putInt("midi_cc_pad_" + i, midiCCPadMap[i]);
+        ed.apply();
+    }
+
+    // ── MIDI Connect / Disconnect toggle ──────────────────────────────────────────────
+
+    public void toggleMidiConnection() {
+        if (openedMidiDevice != null) {
+            try { closeMidiDevice(); } catch (Exception ignored) {}
+            if (txtMidiStatus != null) txtMidiStatus.setText("MIDI: disconnected");
+            updateMidiConnectButton(false);
+            Toast.makeText(this,
+                "🔌 MIDI disconnected — SPD-20 Pro plays original kit",
+                Toast.LENGTH_SHORT).show();
+        } else {
+            if (midiManager == null) midiManager = (android.media.midi.MidiManager) getSystemService("midi");
+            if (midiManager != null) {
+                android.media.midi.MidiDeviceInfo[] infos = midiManager.getDevices();
+                if (infos != null && infos.length > 0) {
+                    for (android.media.midi.MidiDeviceInfo info : infos) openMidiDevice(info);
+                    Toast.makeText(this, "🔌 MIDI connecting…", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this,
+                        "❌ Koi MIDI device nahi mila — USB check karo",
+                        Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+    }
+
+    private void updateMidiConnectButton(boolean connected) {
+        if (btnMidiConnect == null) return;
+        if (connected) {
+            btnMidiConnect.setText("🔌MIDI\nON");
+            btnMidiConnect.setBackgroundResource(R.drawable.btn_3d_orange);
+        } else {
+            btnMidiConnect.setText("🔌MIDI\nOFF");
+            btnMidiConnect.setBackgroundResource(R.drawable.btn_3d_dark);
+        }
+    }
+
+    private void showMidiKeyMappingDialog() {
+        android.widget.LinearLayout root = new android.widget.LinearLayout(this);
+        root.setOrientation(android.widget.LinearLayout.VERTICAL);
+        root.setPadding(24, 16, 24, 8);
+        root.setBackgroundColor(0xFF1a1a2e);
+
+        // ON/OFF toggle
+        final Button btnToggle = new Button(this);
+        btnToggle.setText(midiKeyMappingEnabled ? "✅ CUSTOM MAPPING: ON  (tap to turn OFF)" : "❌ CUSTOM MAPPING: OFF  (tap to turn ON)");
+        btnToggle.setBackgroundColor(midiKeyMappingEnabled ? 0xFF006600 : 0xFF333333);
+        btnToggle.setTextColor(0xFFFFFFFF);
+        btnToggle.setTextSize(12f);
+        android.widget.LinearLayout.LayoutParams toggleLP = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        toggleLP.setMargins(0, 0, 0, 16);
+        btnToggle.setLayoutParams(toggleLP);
+        root.addView(btnToggle);
+
+        android.widget.TextView tvInfo = new android.widget.TextView(this);
+        tvInfo.setTextColor(0xFF888888);
+        tvInfo.setTextSize(11f);
+        tvInfo.setText("Har pad ke liye MIDI note number set karo (0–127).\nLEARN: MIDI controller se koi button dabao — auto-assign hoga.");
+        android.widget.LinearLayout.LayoutParams infoLP = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        infoLP.setMargins(0, 0, 0, 12);
+        tvInfo.setLayoutParams(infoLP);
+        root.addView(tvInfo);
+
+        final android.widget.EditText[] noteEdits  = new android.widget.EditText[8];
+        final android.widget.EditText[] ccEdits    = new android.widget.EditText[8];
+        final Button[]                  learnBtns  = new Button[8];
+        final Button[]                  ccLearnBtns = new Button[8];
+        for (int i = 0; i < 8; i++) {
+            final int padIdx = i;
+            android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            android.widget.LinearLayout.LayoutParams rowLP = new android.widget.LinearLayout.LayoutParams(-1, -2);
+            rowLP.setMargins(0, 4, 0, 4);
+            row.setLayoutParams(rowLP);
+
+            android.widget.TextView lbl = new android.widget.TextView(this);
+            lbl.setText("PAD " + (i + 1));
+            lbl.setTextColor(0xFFCCCCCC);
+            lbl.setTextSize(11f);
+            lbl.setLayoutParams(new android.widget.LinearLayout.LayoutParams(-2, -2));
+
+            android.widget.EditText et = new android.widget.EditText(this);
+            et.setText(String.valueOf(midiNoteMap[i]));
+            et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+            et.setTextColor(0xFFFFFFFF);
+            et.setBackgroundColor(0xFF222244);
+            et.setTextSize(12f);
+            et.setGravity(android.view.Gravity.CENTER);
+            android.widget.LinearLayout.LayoutParams etLP = new android.widget.LinearLayout.LayoutParams(0, -2, 1f);
+            etLP.setMargins(6, 0, 4, 0);
+            et.setLayoutParams(etLP);
+            noteEdits[i] = et;
+
+            Button btnLearn = new Button(this);
+            btnLearn.setText("🎹NOTE\nLEARN");
+            btnLearn.setBackgroundColor(0xFF003399);
+            btnLearn.setTextColor(0xFFFFFFFF);
+            btnLearn.setTextSize(9f);
+            btnLearn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(-2, -2));
+            learnBtns[i] = btnLearn;
+            btnLearn.setOnClickListener(vv -> {
+                for (Button b : learnBtns) if (b != null) b.setBackgroundColor(0xFF003399);
+                midiLearnTargetPad = padIdx;
+                midiLearnMode      = true;
+                midiCCLearnMode    = false;
+                btnLearn.setBackgroundColor(0xFFCC8800);
+                btnLearn.setText("⏳NOTE...");
+                Toast.makeText(this, "PAD " + (padIdx + 1) + ": Note dabao...", Toast.LENGTH_SHORT).show();
+            });
+
+            android.widget.EditText etCC = new android.widget.EditText(this);
+            int savedCC = midiCCPadMap[i];
+            etCC.setText(savedCC >= 0 ? String.valueOf(savedCC) : "");
+            etCC.setHint("CC");
+            etCC.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+            etCC.setTextColor(0xFFFFFF88);
+            etCC.setBackgroundColor(0xFF332200);
+            etCC.setTextSize(12f);
+            etCC.setGravity(android.view.Gravity.CENTER);
+            android.widget.LinearLayout.LayoutParams etCCLP = new android.widget.LinearLayout.LayoutParams(0, -2, 0.9f);
+            etCCLP.setMargins(4, 0, 4, 0);
+            etCC.setLayoutParams(etCCLP);
+            ccEdits[i] = etCC;
+
+            Button btnCCLearn = new Button(this);
+            btnCCLearn.setText("🎛️CC\nLEARN");
+            btnCCLearn.setBackgroundColor(0xFF664400);
+            btnCCLearn.setTextColor(0xFFFFFFFF);
+            btnCCLearn.setTextSize(9f);
+            btnCCLearn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(-2, -2));
+            ccLearnBtns[i] = btnCCLearn;
+            btnCCLearn.setOnClickListener(vv -> {
+                for (Button b : ccLearnBtns) if (b != null) b.setBackgroundColor(0xFF664400);
+                midiCCLearnTargetPad = padIdx;
+                midiCCLearnMode      = true;
+                midiLearnMode        = false;
+                btnCCLearn.setBackgroundColor(0xFFFF8800);
+                btnCCLearn.setText("⏳CC...");
+                Toast.makeText(this, "PAD " + (padIdx + 1) + ": SPD-20 CC button dabao...", Toast.LENGTH_SHORT).show();
+            });
+
+            row.addView(lbl);
+            row.addView(et);
+            row.addView(btnLearn);
+            row.addView(etCC);
+            row.addView(btnCCLearn);
+            root.addView(row);
+        }
+
+        android.widget.LinearLayout bottomRow = new android.widget.LinearLayout(this);
+        bottomRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        android.widget.LinearLayout.LayoutParams bottomLP = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        bottomLP.setMargins(0, 16, 0, 0);
+        bottomRow.setLayoutParams(bottomLP);
+
+        Button btnApply = new Button(this);
+        btnApply.setText("💾 APPLY");
+        btnApply.setBackgroundColor(0xFF006600);
+        btnApply.setTextColor(0xFFFFFFFF);
+        btnApply.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, -2, 1f));
+
+        Button btnReset = new Button(this);
+        btnReset.setText("↩ RESET");
+        btnReset.setBackgroundColor(0xFF550000);
+        btnReset.setTextColor(0xFFFFFFFF);
+        android.widget.LinearLayout.LayoutParams resetLP = new android.widget.LinearLayout.LayoutParams(0, -2, 1f);
+        resetLP.setMargins(8, 0, 0, 0);
+        btnReset.setLayoutParams(resetLP);
+
+        bottomRow.addView(btnApply);
+        bottomRow.addView(btnReset);
+        root.addView(bottomRow);
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(root);
+        final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
+            .setTitle("🎹 MIDI Key Mapping")
+            .setView(sv)
+            .setNegativeButton("CLOSE", null)
+            .create();
+
+        btnToggle.setOnClickListener(vv -> {
+            midiKeyMappingEnabled = !midiKeyMappingEnabled;
+            btnToggle.setText(midiKeyMappingEnabled ? "✅ CUSTOM MAPPING: ON  (tap to turn OFF)" : "❌ CUSTOM MAPPING: OFF  (tap to turn ON)");
+            btnToggle.setBackgroundColor(midiKeyMappingEnabled ? 0xFF006600 : 0xFF333333);
+            saveMidiNoteMap();
+            updateMidiMapButton();
+        });
+
+        btnApply.setOnClickListener(vv -> {
+            for (int i = 0; i < 8; i++) {
+                try {
+                    int val = Integer.parseInt(noteEdits[i].getText().toString().trim());
+                    midiNoteMap[i] = Math.max(0, Math.min(127, val));
+                    noteEdits[i].setText(String.valueOf(midiNoteMap[i]));
+                } catch (NumberFormatException ignored) {}
+                String ccTxt = ccEdits[i].getText().toString().trim();
+                if (ccTxt.isEmpty()) {
+                    midiCCPadMap[i] = -1;
+                } else {
+                    try {
+                        int cv = Integer.parseInt(ccTxt);
+                        midiCCPadMap[i] = Math.max(0, Math.min(127, cv));
+                        ccEdits[i].setText(String.valueOf(midiCCPadMap[i]));
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+            saveMidiNoteMap();
+            saveMidiCCPadMap();
+            Toast.makeText(this, "✅ Note + CC Mapping save ho gaya!", Toast.LENGTH_SHORT).show();
+        });
+
+        btnReset.setOnClickListener(vv -> new android.app.AlertDialog.Builder(this)
+            .setTitle("Reset to Default?")
+            .setMessage("Notes default par aur CC map clear ho jayega.")
+            .setPositiveButton("RESET", (d, w) -> {
+                System.arraycopy(MIDI_NOTE_MAP_DEFAULT, 0, midiNoteMap, 0, 8);
+                System.arraycopy(MIDI_CC_PAD_DEFAULT, 0, midiCCPadMap, 0, 8);
+                for (int i = 0; i < 8; i++) {
+                    noteEdits[i].setText(String.valueOf(midiNoteMap[i]));
+                    ccEdits[i].setText("");
+                }
+                saveMidiNoteMap();
+                saveMidiCCPadMap();
+                Toast.makeText(this, "↩ Default mapping restore ho gaya!", Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("Cancel", null)
+            .show());
+
+        dlg.show();
+        android.view.Window w = dlg.getWindow();
+        if (w != null) {
+            int screenW = getResources().getDisplayMetrics().widthPixels;
+            w.setLayout((int)(screenW * 0.95f), android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    /** Updates the Velocity button label + color to match velocitySensitiveMode. */
+    private void updateVelocityButton() {
+        if (btnVelocity == null) return;
+        if (velocitySensitiveMode) {
+            btnVelocity.setText("🎚️VEL\nON");
+            btnVelocity.setBackgroundResource(R.drawable.btn_3d_orange);
+        } else {
+            btnVelocity.setText("🎚️VEL\nOFF");
+            btnVelocity.setBackgroundResource(R.drawable.btn_3d_dark);
+        }
+    }
+
+    @Override // android.app.Activity
+    protected void onCreate(Bundle savedInstanceState) {
+        MainActivity.globalInstance = this;   // cross-activity kit sync ke liye
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.main);
+        hideSystemUI();
+        Toast.makeText(this, "Mobile Octapad Pramod Sahu", 0).show();
+        initPresets();
+        setupMidi();
+        getWindow().getDecorView().setSoundEffectsEnabled(false);
+        this.prefs = getSharedPreferences(PREF_NAME, 0);
+        // txtBrand auto-size to fit screen — no marquee scroll needed
+        this.txtKitName = (TextView) findViewById(R.id.txtKitName);
+        this.txtSelectedPad = (TextView) findViewById(R.id.txtSelectedPad);
+        this.txtMidiStatus = (TextView) findViewById(R.id.txtMidiStatus);
+        this.txtMidiStatus.setText("MIDI status: disconnected");
+        this.btnEditMode = (Button) findViewById(R.id.btnEditMode);
+        this.btnSaveKit = (Button) findViewById(R.id.btnSaveKit);
+        this.btnLoadKit = (Button) findViewById(R.id.btnLoadKit);
+        this.btnRenameKit = (Button) findViewById(R.id.btnRenameKit);
+        this.btnPrevKit = (Button) findViewById(R.id.btnPrevKit);
+        this.btnNextKit = (Button) findViewById(R.id.btnNextKit);
+        this.btnEq = (Button) findViewById(R.id.btnEq);
+        this.btnPadEdit = (Button) findViewById(R.id.btnPadEdit);
+        // Velocity Sensitivity toggle button
+        this.btnVelocity = (Button) findViewById(R.id.btnVelocity);
+        // MIDI Key Mapping button
+        this.btnMidiMap = (Button) findViewById(R.id.btnMidiMap);
+        // Bank selector buttons (BANK A / BANK B / A+B LAYER)
+        this.btnBankA  = (Button) findViewById(R.id.btnBankA);
+        this.btnBankB  = (Button) findViewById(R.id.btnBankB);
+        this.btnBankAB = (Button) findViewById(R.id.btnBankAB);
+        Button button = (Button) findViewById(R.id.btnLoops);
+        this.btnLoops = button;
+        if (button != null) {
+            button.setOnClickListener(new View.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.4
+                @Override // android.view.View.OnClickListener
+                public void onClick(View v) {
+                    Intent intent = new Intent(MainActivity.this, LoopsActivity.class);
+                    // REORDER_TO_FRONT: if a LoopsActivity is already alive in the
+                    // back stack (background playback mode), bring it to front instead
+                    // of creating a second instance on top of it.
+                    intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                    MainActivity.this.startActivity(intent);
+                }
+            });
+        }
+        // Cloud account row (Google Sign-In / Firebase) — same login system as LoopsActivity
+        this.btnSignOut    = (Button)   findViewById(R.id.btnSignOut);
+        this.txtSignedInAs = (TextView) findViewById(R.id.txtSignedInAs);
+        com.google.firebase.auth.FirebaseUser _signedInUser =
+                com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        if (this.txtSignedInAs != null) {
+            this.txtSignedInAs.setText(
+                    _signedInUser != null && _signedInUser.getEmail() != null
+                            ? "Signed in: " + _signedInUser.getEmail() : "");
+        }
+        if (this.btnSignOut != null) {
+            this.btnSignOut.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    CloudSync.pushCurrentUserSettings(MainActivity.this);
+                    com.google.firebase.auth.FirebaseAuth.getInstance().signOut();
+                    com.google.android.gms.auth.api.signin.GoogleSignInOptions gso =
+                            new com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                            .requestEmail().build();
+                    com.google.android.gms.auth.api.signin.GoogleSignIn
+                            .getClient(MainActivity.this, gso).signOut();
+                    Intent logoutIntent = new Intent(MainActivity.this, LoginActivity.class);
+                    logoutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(logoutIntent);
+                    finish();
+                }
+            });
+        }
+        // ── Real-time deactivation listener ──────────────────────────────────
+        // Agar admin "Deactivate" kare to user turant logout ho jaye — koi wait nahi
+        com.google.firebase.auth.FirebaseUser _sessionUser =
+                com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        if (_sessionUser != null) {
+            final String _uid    = _sessionUser.getUid();
+            final String _DB_URL = "https://pramod-octapad-loop-default-rtdb.asia-southeast1.firebasedatabase.app";
+            deactivateRef = com.google.firebase.database.FirebaseDatabase
+                    .getInstance(_DB_URL)
+                    .getReference("authorizedUsers")
+                    .child(_uid);
+            deactivateListener = new com.google.firebase.database.ValueEventListener() {
+                @Override
+                public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                    if (!snapshot.exists() && !isForceLogoutInProgress) {
+                        isForceLogoutInProgress = true;
+                        // Admin ne deactivate kar diya — immediately force-logout
+                        runOnUiThread(() -> {
+                            getSharedPreferences("AuthPrefs", MODE_PRIVATE)
+                                    .edit().putBoolean("licensed_ok", false).apply();
+                            com.google.firebase.auth.FirebaseAuth.getInstance().signOut();
+                            com.google.android.gms.auth.api.signin.GoogleSignInOptions _gso =
+                                    new com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                                            com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                    .requestEmail().build();
+                            com.google.android.gms.auth.api.signin.GoogleSignIn
+                                    .getClient(MainActivity.this, _gso).signOut();
+                            Intent _logoutIntent = new Intent(MainActivity.this, LoginActivity.class);
+                            _logoutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                            startActivity(_logoutIntent);
+                            finish();
+                        });
+                    }
+                }
+                @Override
+                public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                    // Network issue — ignore, will retry on next event
+                }
+            };
+            deactivateRef.addValueEventListener(deactivateListener);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        this.seekVolume = (SeekBar) findViewById(R.id.seekVolume);
+        this.seekPitch = (SeekBar) findViewById(R.id.seekPitch);
+        this.seekMasterVolume = (SeekBar) findViewById(R.id.seekMasterVolume);
+        this.seekMasterPitch = (SeekBar) findViewById(R.id.seekMasterPitch);
+        this.fxControlBar = findViewById(R.id.fxControlBar);
+        this.advControlBar = findViewById(R.id.advControlBar);
+
+        // ── Drums APK: LOOPS/STOP hide, Sign Out FX/ADV me ──────────────────
+        if (BuildConfig.FLAVOR.equals("drums")) {
+            // 1. LOOPS aur STOP buttons hata do (LoopsActivity se koi matlab nahi)
+            if (this.btnLoops != null) this.btnLoops.setVisibility(View.GONE);
+            View btnStopLoop = findViewById(R.id.btnStopLoop);
+            if (btnStopLoop != null) btnStopLoop.setVisibility(View.GONE);
+            // 3. FX/ADV panel ke andar Sign Out button dikhao + wire karo
+            Button btnDrumsSignOut = findViewById(R.id.btnDrumsSignOut);
+            if (btnDrumsSignOut != null) {
+                btnDrumsSignOut.setVisibility(View.VISIBLE);
+                btnDrumsSignOut.setOnClickListener(v -> {
+                    CloudSync.pushCurrentUserSettings(MainActivity.this);
+                    com.google.firebase.auth.FirebaseAuth.getInstance().signOut();
+                    com.google.android.gms.auth.api.signin.GoogleSignInOptions _gso3 =
+                            new com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                            .requestEmail().build();
+                    com.google.android.gms.auth.api.signin.GoogleSignIn
+                            .getClient(MainActivity.this, _gso3).signOut();
+                    Intent _li = new Intent(MainActivity.this, LoginActivity.class);
+                    _li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(_li);
+                    finish();
+                });
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        this.chkDelay = (CheckBox) findViewById(R.id.chkDelay);
+        this.seekDelayTime = (SeekBar) findViewById(R.id.seekDelayTime);
+        this.seekDelayLevel = (SeekBar) findViewById(R.id.seekDelayLevel);
+        this.seekEqHigh = (SeekBar) findViewById(R.id.seekEqHigh);
+        this.seekEqMid = (SeekBar) findViewById(R.id.seekEqMid);
+        this.seekEqLow = (SeekBar) findViewById(R.id.seekEqLow);
+        this.seekChokeGroup = (SeekBar) findViewById(R.id.seekChokeGroup);
+        AudioEngine audioEngine = new AudioEngine(this);
+        this.audioEngine = audioEngine;
+        audioEngine.start();
+        setupAudioRouting();   // earphone / BT plug-unplug handling
+        // Audio focus pehle se lo — pehli pad hit pe OS ko audio path switch
+        // nahi karna padta, isliye pehli hit ka delay khatam hota hai.
+        try {
+            AudioManager _am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (_am != null) _am.requestAudioFocus(null,
+                AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+        } catch (Exception ignored) {}
+        initPads();
+        initSeekBars();
+        setupFavorites();
+        // Restore velocity sensitivity mode from prefs
+        this.velocitySensitiveMode = this.prefs.getBoolean("velocity_sensitive_mode", false);
+        updateVelocityButton();
+        // Restore MIDI key mapping (note map + CC pad map)
+        loadMidiNoteMap();
+        loadMidiCCPadMap();
+        updateMidiMapButton();
+        // Restore MIDI Kit Lock (SPD-20 Pro kit filter)
+        midiKitLockNumber = prefs.getInt("midi_kit_lock", -1);
+        // MIDI Connect button
+        this.btnMidiConnect = (Button) findViewById(R.id.btnMidiConnect);
+        updateMidiConnectButton(openedMidiDevice != null);
+        if (this.btnMidiConnect != null) {
+            this.btnMidiConnect.setOnClickListener(v -> toggleMidiConnection());
+        }
+        if (this.btnVelocity != null) {
+            this.btnVelocity.setOnClickListener(v -> {
+                velocitySensitiveMode = !velocitySensitiveMode;
+                prefs.edit().putBoolean("velocity_sensitive_mode", velocitySensitiveMode).apply();
+                updateVelocityButton();
+            });
+        }
+        // ── MIDI Key Mapping button ────────────────────────────────────────────
+        if (this.btnMidiMap != null) {
+            this.btnMidiMap.setOnClickListener(v -> showMidiKeyMappingDialog());
+        }
+        // ── CC Controls mapping button ─────────────────────────────────────────
+        this.btnCCCtrl = (Button) findViewById(R.id.btnCCCtrl);
+        if (this.btnCCCtrl != null) {
+            this.btnCCCtrl.setOnClickListener(v -> showMidiCCControlDialog());
+        }
+        this.editMode = this.prefs.getBoolean(KEY_EDIT_MODE, false);
+        int i = this.prefs.getInt(KEY_KIT_INDEX, 1);
+        this.kitIndex = i;
+        if (i < 1) {
+            this.kitIndex = 1;
+        }
+        // Restore Bank B's independent kit index (defaults to kitIndex for backward compat)
+        this.kitIndexB = this.prefs.getInt("kit_index_B", this.kitIndex);
+        if (this.kitIndexB < 1) this.kitIndexB = 1;
+        // Restore Bank mode (A / B / A+B Layer)
+        this.bankMode = this.prefs.getInt("bank_mode", BANK_A);
+        updateBankToggleButton();
+        loadKitFromMemory(this.kitIndex);
+        updateEditButtonUI();
+        // ── Init complete: kitIndex + currentKitName are now correct ────────────
+        // From this point on, saveKitToMemory will write real kit data.
+        this.initialized = true;
+        this.btnEditMode.setOnClickListener(new View.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.5
+            @Override // android.view.View.OnClickListener
+            public void onClick(View v) {
+                MainActivity.this.editMode = !MainActivity.this.editMode;
+                if (!MainActivity.this.editMode) {
+                    MainActivity.this.copySourcePad = -1;
+                    MainActivity.this.swapSourcePad = -1;
+                }
+                MainActivity.this.updateEditButtonUI();
+                MainActivity.this.prefs.edit().putBoolean(MainActivity.KEY_EDIT_MODE, MainActivity.this.editMode).apply();
+                MainActivity mainActivity = MainActivity.this;
+                mainActivity.saveKitToMemory(mainActivity.kitIndex);
+            }
+        });
+        // ── Bank selector buttons (BANK A / BANK B / A+B LAYER) ───────────────
+        // Each button sets the bank mode directly — no cycling.
+        if (this.btnBankA != null) {
+            this.btnBankA.setOnClickListener(v -> setBankMode(BANK_A, "🅰️ Bank A — only Bank A pads active"));
+        }
+        if (this.btnBankB != null) {
+            this.btnBankB.setOnClickListener(v -> setBankMode(BANK_B, "🅱️ Bank B — only Bank B pads active"));
+        }
+        if (this.btnBankAB != null) {
+            this.btnBankAB.setOnClickListener(v -> setBankMode(LAYER_AB, "🅰️+🅱️ A+B Layer — both banks play together"));
+        }
+        this.btnRenameKit.setOnClickListener(new View.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.6
+            @Override // android.view.View.OnClickListener
+            public void onClick(View v) {
+                MainActivity.this.renameKitDialog();
+            }
+        });
+        // ── Hold-repeat touch listeners (Roland SPD style) ────────────────────
+        setupKitHoldButton(this.btnPrevKit, -1);
+        setupKitHoldButton(this.btnNextKit, +1);
+        // ── Kit Jump: tap kit name → number keyboard → jump instantly ─────────
+        this.txtKitName.setOnClickListener(v -> showKitJumpDialog());
+        this.btnLoadKit.setOnClickListener(new View.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.9
+            @Override // android.view.View.OnClickListener
+            public void onClick(View v) {
+                Intent intent = new Intent("android.intent.action.OPEN_DOCUMENT_TREE");
+                intent.addFlags(1);
+                intent.addFlags(2);
+                intent.addFlags(64);
+                MainActivity.this.startActivityForResult(intent, MainActivity.REQ_LOAD_FOLDER);
+            }
+        });
+        this.btnSaveKit.setOnClickListener(new View.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.10
+            @Override // android.view.View.OnClickListener
+            public void onClick(View v) {
+                MainActivity.this.showSaveKitNameDialog();
+            }
+        });
+        Button button2 = this.btnEq;
+        if (button2 != null) {
+            button2.setOnClickListener(new View.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.11
+                @Override // android.view.View.OnClickListener
+                public void onClick(View v) {
+                    if (MainActivity.this.fxControlBar != null && MainActivity.this.advControlBar != null) {
+                        if (MainActivity.this.fxControlBar.getVisibility() == 0) {
+                            MainActivity.this.fxControlBar.setVisibility(8);
+                            MainActivity.this.advControlBar.setVisibility(8);
+                            MainActivity.this.btnEq.setBackgroundResource(R.drawable.btn_3d_dark);
+                            return;
+                        }
+                        MainActivity.this.fxControlBar.setVisibility(0);
+                        MainActivity.this.advControlBar.setVisibility(0);
+                        MainActivity.this.btnEq.setBackgroundResource(R.drawable.btn_3d_orange);
+                    }
+                }
+            });
+        }
+        // ── PAD EDIT button — full EQ/Gain/Volume/Pitch/Pan dialog ──────────
+        if (this.btnPadEdit != null) {
+            this.btnPadEdit.setOnClickListener(v ->
+                MainActivity.this.showPadEditDialog());
+        }
+    }
+
+    private void initPads() {
+        int[] padIds = {R.id.pad1, R.id.pad2, R.id.pad3, R.id.pad4, R.id.pad5, R.id.pad6, R.id.pad7, R.id.pad8};
+        for (int i = 0; i < 8; i++) {
+            this.pads[i] = (Button) findViewById(padIds[i]);
+            this.padVolume[i] = 0.8f;
+            this.padPitch[i] = 1.0f;
+            this.padDelayOn[i] = false;
+            this.padDelayTime[i] = 150.0f;
+            this.padDelayLevel[i] = 0.5f;
+            this.padEqHigh[i] = 0.0f;
+            this.padEqMid[i] = 0.0f;
+            this.padEqLow[i] = 0.0f;
+            this.padGain[i] = 1.0f;
+            this.padPan[i]  = 0.0f;
+            this.activePointerId[i] = -1;
+            this.lastHitTime[i] = 0;
+            this.pads[i].setSoundEffectsEnabled(false);
+            this.pads[i].setHapticFeedbackEnabled(false);
+            this.pads[i].setClickable(true);
+            this.pads[i].setLongClickable(false);
+            this.pads[i].setFocusable(false);
+            this.pads[i].setFocusableInTouchMode(false);
+            this.pads[i].setOnClickListener(null);
+            this.pads[i].setOnTouchListener(new PadTouch(i));
+        }
+        // Global drum master volume — share the same pref as LoopsActivity's
+        // master volume so a hardware knob heard on one screen carries to the other.
+        this.drumMasterVolume = this.prefs.getFloat("loop_master_volume", 1.0f);
+        this.drumMasterPitch = this.prefs.getFloat("drum_master_pitch", 1.0f);
+        // Seed M-VOL / M-PITCH slider positions (listeners attach later in initSeekBars).
+        if (this.seekMasterVolume != null) {
+            this.seekMasterVolume.setProgress((int) (this.drumMasterVolume * 100.0f));
+        }
+        if (this.seekMasterPitch != null) {
+            this.seekMasterPitch.setProgress((int) (this.drumMasterPitch * 100.0f));
+        }
+    }
+
+    private void initSeekBars() {
+        this.seekVolume.setMax(100);
+        this.seekPitch.setMax(100);
+        this.seekVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.12
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                // ── Bank-aware volume ──────────────────────────────────────
+                // BANK_B → only Bank B; LAYER_AB → BOTH banks (A+B play together);
+                // otherwise → Bank A.
+                if (MainActivity.this.bankMode == BANK_B) {
+                    MainActivity.this.padVolumeB[MainActivity.this.selectedPad] = progress / 100.0f;
+                } else {
+                    MainActivity.this.padVolume[MainActivity.this.selectedPad] = progress / 100.0f;
+                    if (MainActivity.this.bankMode == LAYER_AB) {
+                        MainActivity.this.padVolumeB[MainActivity.this.selectedPad] = progress / 100.0f;
+                    }
+                }
+                // Only persist on user drag — programmatic setProgress during pad
+                // switch should NOT trigger a synchronous disk write (commit()).
+                if (fromUser) {
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        this.seekPitch.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.13
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                // ── Bank-aware pitch ───────────────────────────────────────
+                // LAYER_AB → both banks move together so the A+B layer stays in
+                // tune; otherwise the active bank only.
+                if (MainActivity.this.bankMode == BANK_B) {
+                    MainActivity.this.padPitchB[MainActivity.this.selectedPad] = (progress / 100.0f) + 0.5f;
+                } else {
+                    MainActivity.this.padPitch[MainActivity.this.selectedPad] = (progress / 100.0f) + 0.5f;
+                    if (MainActivity.this.bankMode == LAYER_AB) {
+                        MainActivity.this.padPitchB[MainActivity.this.selectedPad] = (progress / 100.0f) + 0.5f;
+                    }
+                }
+                if (fromUser) {
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        // ── MASTER VOLUME (M-VOL) — applies on top of per-pad volumes ──────
+        // Synced with LoopsActivity.masterVolume via "loop_master_volume" so the
+        // hardware volume knob and this slider never fight.
+        this.seekMasterVolume.setMax(100);
+        this.seekMasterVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.14
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                MainActivity.this.drumMasterVolume = Math.max(0f, Math.min(1f, progress / 100.0f));
+                // Persist on user drag only — programmatic setProgress (CC knob /
+                // resume refresh) must not spam disk writes.
+                if (fromUser) {
+                    MainActivity.this.prefs.edit()
+                            .putFloat("loop_master_volume", MainActivity.this.drumMasterVolume)
+                            .apply();
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        // ── MASTER PITCH (M-PITCH) — applies on top of per-pad pitch ───────
+        // Progress 0–200 → 0.0–2.0x (default 100 → 1.0x), same range as the CC
+        // pitch knob (CC 21). 0.1 floor keeps pads audible.
+        this.seekMasterPitch.setMax(200);
+        this.seekMasterPitch.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.15
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                MainActivity.this.drumMasterPitch = Math.max(0.1f, Math.min(2.0f, progress / 100.0f));
+                if (fromUser) {
+                    MainActivity.this.prefs.edit()
+                            .putFloat("drum_master_pitch", MainActivity.this.drumMasterPitch)
+                            .apply();
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        this.chkDelay.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() { // from class: com.pramod.loopmidi.MainActivity.16
+            @Override // android.widget.CompoundButton.OnCheckedChangeListener
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                // ── Bank-aware delay on/off ────────────────────────────────
+                // LAYER_AB → both banks toggle together.
+                if (MainActivity.this.bankMode == BANK_B) {
+                    MainActivity.this.padDelayOnB[MainActivity.this.selectedPad] = isChecked;
+                } else {
+                    MainActivity.this.padDelayOn[MainActivity.this.selectedPad] = isChecked;
+                    if (MainActivity.this.bankMode == LAYER_AB) {
+                        MainActivity.this.padDelayOnB[MainActivity.this.selectedPad] = isChecked;
+                    }
+                }
+                // Only persist on user tap — programmatic setChecked during pad
+                // switch should NOT trigger a synchronous disk write.
+                if (buttonView.isPressed()) {
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+        });
+        this.seekDelayTime.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.15
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    // ── Bank-aware delay time ──────────────────────────────
+                    // LAYER_AB → both banks update together.
+                    if (MainActivity.this.bankMode == BANK_B) {
+                        MainActivity.this.padDelayTimeB[MainActivity.this.selectedPad] = progress;
+                    } else {
+                        MainActivity.this.padDelayTime[MainActivity.this.selectedPad] = progress;
+                        if (MainActivity.this.bankMode == LAYER_AB) {
+                            MainActivity.this.padDelayTimeB[MainActivity.this.selectedPad] = progress;
+                        }
+                    }
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        this.seekDelayLevel.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.16
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    // ── Bank-aware delay level ─────────────────────────────
+                    // LAYER_AB → both banks update together.
+                    if (MainActivity.this.bankMode == BANK_B) {
+                        MainActivity.this.padDelayLevelB[MainActivity.this.selectedPad] = progress / 100.0f;
+                    } else {
+                        MainActivity.this.padDelayLevel[MainActivity.this.selectedPad] = progress / 100.0f;
+                        if (MainActivity.this.bankMode == LAYER_AB) {
+                            MainActivity.this.padDelayLevelB[MainActivity.this.selectedPad] = progress / 100.0f;
+                        }
+                    }
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        this.seekEqHigh.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.17
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    // ── Bank-aware EQ High ─────────────────────────────────
+                    // LAYER_AB → both banks update together.
+                    if (MainActivity.this.bankMode == BANK_B) {
+                        MainActivity.this.padEqHighB[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                    } else {
+                        MainActivity.this.padEqHigh[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                        if (MainActivity.this.bankMode == LAYER_AB) {
+                            MainActivity.this.padEqHighB[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                        }
+                    }
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        this.seekEqMid.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.18
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    // ── Bank-aware EQ Mid ──────────────────────────────────
+                    // LAYER_AB → both banks update together.
+                    if (MainActivity.this.bankMode == BANK_B) {
+                        MainActivity.this.padEqMidB[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                    } else {
+                        MainActivity.this.padEqMid[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                        if (MainActivity.this.bankMode == LAYER_AB) {
+                            MainActivity.this.padEqMidB[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                        }
+                    }
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        this.seekEqLow.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.19
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    // ── Bank-aware EQ Low ──────────────────────────────────
+                    // LAYER_AB → both banks update together.
+                    if (MainActivity.this.bankMode == BANK_B) {
+                        MainActivity.this.padEqLowB[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                    } else {
+                        MainActivity.this.padEqLow[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                        if (MainActivity.this.bankMode == LAYER_AB) {
+                            MainActivity.this.padEqLowB[MainActivity.this.selectedPad] = (progress - 100) * 0.15f;
+                        }
+                    }
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+        this.seekChokeGroup.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { // from class: com.pramod.loopmidi.MainActivity.20
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    // ── Bank-aware choke group ─────────────────────────────
+                    // LAYER_AB → both banks update together.
+                    if (MainActivity.this.bankMode == BANK_B) {
+                        MainActivity.this.padChokeGroupB[MainActivity.this.selectedPad] = progress;
+                    } else {
+                        MainActivity.this.padChokeGroup[MainActivity.this.selectedPad] = progress;
+                        if (MainActivity.this.bankMode == LAYER_AB) {
+                            MainActivity.this.padChokeGroupB[MainActivity.this.selectedPad] = progress;
+                        }
+                    }
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                }
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            @Override // android.widget.SeekBar.OnSeekBarChangeListener
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+    }
+
+    public void updateEditButtonUI() {
+        this.btnEditMode.setText(this.editMode ? "EDIT ON" : "EDIT OFF");
+        this.btnEditMode.setBackgroundResource(this.editMode ? R.drawable.btn_3d_red : R.drawable.btn_3d_dark);
+    }
+
+    /** Highlights the active bank selector button (A / B / A+B) to match bankMode. */
+    public void updateBankToggleButton() {
+        // Highlight the active bank button; dim the others.
+        if (btnBankA != null) {
+            btnBankA.setBackgroundResource(bankMode == BANK_A ? R.drawable.btn_3d_darkred : R.drawable.btn_3d_dark);
+        }
+        if (btnBankB != null) {
+            btnBankB.setBackgroundResource(bankMode == BANK_B ? R.drawable.btn_3d_blue : R.drawable.btn_3d_dark);
+        }
+        if (btnBankAB != null) {
+            btnBankAB.setBackgroundResource(bankMode == LAYER_AB ? R.drawable.btn_3d_orange : R.drawable.btn_3d_dark);
+        }
+        // ── Refresh seekbars to show correct bank's values for current pad ──
+        refreshSeekBarsForCurrentBankAndPad();
+    }
+
+    /** Set the active bank (BANK_A / BANK_B / LAYER_AB), persist and refresh UI. */
+    private void setBankMode(int mode, String toastMsg) {
+        bankMode = mode;
+        prefs.edit().putInt("bank_mode", bankMode).commit();
+        updateBankToggleButton();
+        // Show/load the active bank's kit name (both banks' samples stay loaded).
+        if (bankMode == BANK_B) {
+            txtKitName.setText(currentKitNameB);
+        } else {
+            txtKitName.setText(currentKitName);
+        }
+        if (toastMsg != null) Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show();
+    }
+
+    /** Refresh all FX seekbars to reflect the currently selected bank + pad. */
+    private void refreshSeekBarsForCurrentBankAndPad() {
+        if (seekVolume == null) return; // UI not yet inflated
+        int pad = this.selectedPad;
+        if (bankMode == BANK_B) {
+            seekVolume.setProgress((int) (padVolumeB[pad] * 100.0f));
+            seekPitch.setProgress((int) ((padPitchB[pad] - 0.5f) * 100.0f));
+            if (chkDelay != null) chkDelay.setChecked(padDelayOnB[pad]);
+            if (seekDelayTime != null) seekDelayTime.setProgress((int) padDelayTimeB[pad]);
+            if (seekDelayLevel != null) seekDelayLevel.setProgress((int) (padDelayLevelB[pad] * 100.0f));
+            if (seekEqHigh != null) seekEqHigh.setProgress(((int) (padEqHighB[pad] / 0.15f)) + 100);
+            if (seekEqMid  != null) seekEqMid.setProgress(((int) (padEqMidB[pad]  / 0.15f)) + 100);
+            if (seekEqLow  != null) seekEqLow.setProgress(((int) (padEqLowB[pad]  / 0.15f)) + 100);
+            if (seekChokeGroup != null) seekChokeGroup.setProgress(padChokeGroupB[pad]);
+        } else {
+            seekVolume.setProgress((int) (padVolume[pad] * 100.0f));
+            seekPitch.setProgress((int) ((padPitch[pad] - 0.5f) * 100.0f));
+            if (chkDelay != null) chkDelay.setChecked(padDelayOn[pad]);
+            if (seekDelayTime != null) seekDelayTime.setProgress((int) padDelayTime[pad]);
+            if (seekDelayLevel != null) seekDelayLevel.setProgress((int) (padDelayLevel[pad] * 100.0f));
+            if (seekEqHigh != null) seekEqHigh.setProgress(((int) (padEqHigh[pad] / 0.15f)) + 100);
+            if (seekEqMid  != null) seekEqMid.setProgress(((int) (padEqMid[pad]  / 0.15f)) + 100);
+            if (seekEqLow  != null) seekEqLow.setProgress(((int) (padEqLow[pad]  / 0.15f)) + 100);
+            if (seekChokeGroup != null) seekChokeGroup.setProgress(padChokeGroup[pad]);
+        }
+    }
+
+    public void playPadSound(int index) {
+        AudioEngine.SampleData sampleData = this.samples[index];
+        if (sampleData == null) {
+            Toast.makeText(this, "No WAV Selected!", 0).show();
+        } else {
+            this.audioEngine.playSample(index, sampleData, this.padVolume[index] * this.padGain[index] * this.drumMasterVolume, 1.0f, this.padPitch[index] * this.drumMasterPitch, 0, this.padDelayOn[index], this.padDelayTime[index], this.padDelayLevel[index], this.padEqLow[index], this.padEqMid[index], this.padEqHigh[index], this.padChokeGroup[index], 0.0f, 0.0f, this.padPan[index]);
+        }
+    }
+
+    /* JADX INFO: Access modifiers changed from: private */
+    /* loaded from: classes3.dex */
+    public class PadTouch implements View.OnTouchListener {
+        int index;
+
+        PadTouch(int i) {
+            this.index = i;
+        }
+
+        @Override // android.view.View.OnTouchListener
+        public boolean onTouch(View v, MotionEvent event) {
+            int action = event.getActionMasked();
+            int pointerIndex = event.getActionIndex();
+            int pointerId = event.getPointerId(pointerIndex);
+            if (action != 0 && action != 5) {
+                if (action != 1 && action != 6 && action != 3) {
+                    return false;
+                }
+                if (MainActivity.this.activePointerId[this.index] == pointerId) {
+                    MainActivity.this.activePointerId[this.index] = -1;
+                    v.setPressed(false);
+                }
+                return true;
+            } else if (MainActivity.this.activePointerId[this.index] != -1) {
+                return true;
+            } else {
+                long now = System.currentTimeMillis();
+                if (now - MainActivity.this.lastHitTime[this.index] < MainActivity.HIT_BLOCK_MS) {
+                    return true;
+                }
+                MainActivity.this.lastHitTime[this.index] = now;
+                MainActivity.this.activePointerId[this.index] = pointerId;
+                // ── Audio BEFORE visual — fire sound with zero setPressed overhead ──
+                if (!MainActivity.this.editMode) {
+                    MainActivity.this.playPadSoundImmediate(this.index);
+                }
+                v.setPressed(true);
+                MainActivity.this.selectedPad = this.index;
+                if (!MainActivity.this.editMode || MainActivity.this.copySourcePad == -1 || MainActivity.this.copySourcePad == this.index) {
+                    if (!MainActivity.this.editMode || MainActivity.this.swapSourcePad == -1 || MainActivity.this.swapSourcePad == this.index) {
+                        if (MainActivity.this.editMode) {
+                            MainActivity.this.showEditPadOptions(this.index);
+                        }
+                        MainActivity.this.txtSelectedPad.setText("Selected: PAD " + (this.index + 1));
+                        // ── Bank-aware seekbar refresh ──────────────────────────────
+                        if (MainActivity.this.bankMode == BANK_B) {
+                            MainActivity.this.seekVolume.setProgress((int) (MainActivity.this.padVolumeB[this.index] * 100.0f));
+                            MainActivity.this.seekPitch.setProgress((int) ((MainActivity.this.padPitchB[this.index] - 0.5f) * 100.0f));
+                            MainActivity.this.chkDelay.setChecked(MainActivity.this.padDelayOnB[this.index]);
+                            MainActivity.this.seekDelayTime.setProgress((int) MainActivity.this.padDelayTimeB[this.index]);
+                            MainActivity.this.seekDelayLevel.setProgress((int) (MainActivity.this.padDelayLevelB[this.index] * 100.0f));
+                            MainActivity.this.seekEqHigh.setProgress(((int) (MainActivity.this.padEqHighB[this.index] / 0.15f)) + 100);
+                            MainActivity.this.seekEqMid.setProgress(((int) (MainActivity.this.padEqMidB[this.index] / 0.15f)) + 100);
+                            MainActivity.this.seekEqLow.setProgress(((int) (MainActivity.this.padEqLowB[this.index] / 0.15f)) + 100);
+                            MainActivity.this.seekChokeGroup.setProgress(MainActivity.this.padChokeGroupB[this.index]);
+                        } else {
+                            MainActivity.this.seekVolume.setProgress((int) (MainActivity.this.padVolume[this.index] * 100.0f));
+                            MainActivity.this.seekPitch.setProgress((int) ((MainActivity.this.padPitch[this.index] - 0.5f) * 100.0f));
+                            MainActivity.this.chkDelay.setChecked(MainActivity.this.padDelayOn[this.index]);
+                            MainActivity.this.seekDelayTime.setProgress((int) MainActivity.this.padDelayTime[this.index]);
+                            MainActivity.this.seekDelayLevel.setProgress((int) (MainActivity.this.padDelayLevel[this.index] * 100.0f));
+                            MainActivity.this.seekEqHigh.setProgress(((int) (MainActivity.this.padEqHigh[this.index] / 0.15f)) + 100);
+                            MainActivity.this.seekEqMid.setProgress(((int) (MainActivity.this.padEqMid[this.index] / 0.15f)) + 100);
+                            MainActivity.this.seekEqLow.setProgress(((int) (MainActivity.this.padEqLow[this.index] / 0.15f)) + 100);
+                            MainActivity.this.seekChokeGroup.setProgress(MainActivity.this.padChokeGroup[this.index]);
+                        }
+                        return true;
+                    }
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.swapPadSound(mainActivity.swapSourcePad, this.index);
+                    MainActivity.this.swapSourcePad = -1;
+                    MainActivity mainActivity2 = MainActivity.this;
+                    mainActivity2.saveKitToMemory(mainActivity2.kitIndex);
+                    return true;
+                }
+                MainActivity mainActivity3 = MainActivity.this;
+                mainActivity3.copyPadSound(mainActivity3.copySourcePad, this.index);
+                MainActivity.this.copySourcePad = -1;
+                MainActivity mainActivity4 = MainActivity.this;
+                mainActivity4.saveKitToMemory(mainActivity4.kitIndex);
+                return true;
+            }
+        }
+    }
+
+    public void showEditPadOptions(final int padIndex) {
+        String copyText = this.copySourcePad == -1 ? "Pad Sound Copy (Select Source)" : "Pad Sound Copy (Paste Mode ON)";
+        String swapText = this.swapSourcePad == -1 ? "Pad Sound Exchange (Select First Pad)" : "Pad Sound Exchange (Swap Mode ON)";
+        String[] options = {"Pad Select Sound", copyText, swapText, "Clear Pad Sound"};
+        new AlertDialog.Builder(this).setTitle("PAD " + (padIndex + 1) + " - EDIT OPTIONS").setItems(options, new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.21
+
+
+            @Override // android.content.DialogInterface.OnClickListener
+            public void onClick(DialogInterface dialog, int which) {
+                if (which != 0) {
+                    if (which == 1) {
+                        MainActivity.this.copySourcePad = padIndex;
+                        MainActivity.this.swapSourcePad = -1;
+                        Toast.makeText(MainActivity.this, "Copy Mode ON: Now tap target PAD to paste", 0).show();
+                        return;
+                    } else if (which == 2) {
+                        MainActivity.this.swapSourcePad = padIndex;
+                        MainActivity.this.copySourcePad = -1;
+                        Toast.makeText(MainActivity.this, "Exchange Mode ON: Now tap second PAD to swap", 0).show();
+                        return;
+                    } else if (which == 3) {
+                        // ── Bank-aware Clear Pad ─────────────────────────────
+                        if (MainActivity.this.bankMode == BANK_B) {
+                            // Clear Bank B pad
+                            MainActivity.this.selectedWavUrisB[padIndex] = null;
+                            MainActivity.this.selectedRawResIdsB[padIndex] = 0;
+                            MainActivity.this.samplesB[padIndex] = null;
+                            MainActivity.this.padVolumeB[padIndex] = 0.8f;
+                            MainActivity.this.padPitchB[padIndex] = 1.0f;
+                            MainActivity.this.padDelayOnB[padIndex] = false;
+                            MainActivity.this.padDelayTimeB[padIndex] = 150.0f;
+                            MainActivity.this.padDelayLevelB[padIndex] = 0.5f;
+                            MainActivity.this.padEqHighB[padIndex] = 0.0f;
+                            MainActivity.this.padEqMidB[padIndex] = 0.0f;
+                            MainActivity.this.padEqLowB[padIndex] = 0.0f;
+                            MainActivity.this.padChokeGroupB[padIndex] = 0;
+                        } else {
+                            // Clear Bank A pad
+                            MainActivity.this.selectedWavUris[padIndex] = null;
+                            MainActivity.this.selectedRawResIds[padIndex] = 0;
+                            MainActivity.this.samples[padIndex] = null;
+                            MainActivity.this.padVolume[padIndex] = 0.8f;
+                            MainActivity.this.padPitch[padIndex] = 1.0f;
+                            MainActivity.this.padDelayOn[padIndex] = false;
+                            MainActivity.this.padDelayTime[padIndex] = 150.0f;
+                            MainActivity.this.padDelayLevel[padIndex] = 0.5f;
+                            MainActivity.this.padEqHigh[padIndex] = 0.0f;
+                            MainActivity.this.padEqMid[padIndex] = 0.0f;
+                            MainActivity.this.padEqLow[padIndex] = 0.0f;
+                            MainActivity.this.padChokeGroup[padIndex] = 0;
+                        }
+                        MainActivity mainActivity = MainActivity.this;
+                        mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                        Toast.makeText(MainActivity.this, "PAD " + (padIndex + 1) + " Cleared!", 0).show();
+                        return;
+                    } else {
+                        return;
+                    }
+                }
+                Intent intent = new Intent("android.intent.action.OPEN_DOCUMENT");
+                intent.addCategory("android.intent.category.OPENABLE");
+                intent.setType("audio/*");
+                intent.addFlags(1);
+                intent.addFlags(64);
+                MainActivity.this.startActivityForResult(intent, MainActivity.REQ_PICK_SINGLE_WAV);
+            }
+        }).setNegativeButton("Cancel", (DialogInterface.OnClickListener) null).show();
+    }
+
+    /**
+     * Full Pad Edit dialog (same as LoopsActivity) — High/Mid/Low EQ, Gain,
+     * Volume, Pitch, Pan + real-time preview + Stop + Reset.
+     * Bank-aware: BANK_B active → edits Bank B arrays (saved under kitIndexB).
+     */
+    public void showPadEditDialog() {
+        final boolean editB = (bankMode == BANK_B);
+
+        // Source (live) arrays for the active bank
+        final float[] srcEqH   = editB ? padEqHighB  : padEqHigh;
+        final float[] srcEqM   = editB ? padEqMidB   : padEqMid;
+        final float[] srcEqL   = editB ? padEqLowB   : padEqLow;
+        final float[] srcGain  = editB ? padGainB    : padGain;
+        final float[] srcVol   = editB ? padVolumeB  : padVolume;
+        final float[] srcPitch = editB ? padPitchB   : padPitch;
+        final float[] srcPan   = editB ? padPanB     : padPan;
+
+        // Working copies (edited live in the dialog, committed on Save)
+        final float[] wEqH    = new float[8];
+        final float[] wEqM    = new float[8];
+        final float[] wEqL    = new float[8];
+        final float[] wGain   = new float[8];
+        final float[] wVol    = new float[8];
+        final float[] wPitch  = new float[8];
+        final float[] wPan    = new float[8];
+        System.arraycopy(srcEqH,   0, wEqH,   0, 8);
+        System.arraycopy(srcEqM,   0, wEqM,   0, 8);
+        System.arraycopy(srcEqL,   0, wEqL,   0, 8);
+        System.arraycopy(srcGain,  0, wGain,  0, 8);
+        System.arraycopy(srcVol,   0, wVol,   0, 8);
+        System.arraycopy(srcPitch, 0, wPitch, 0, 8);
+        System.arraycopy(srcPan,   0, wPan,   0, 8);
+        final float[][] wArrays = {wEqH, wEqM, wEqL, wGain, wVol, wPitch, wPan};
+
+        final int[] selPad = { (selectedPad >= 0 && selectedPad < 8) ? selectedPad : 0 };
+        final String[] paramLabels =
+            {"EQ HIGH (dB)", "EQ MID (dB)", "EQ LOW (dB)", "GAIN", "VOLUME", "PITCH", "PAN"};
+        final float[]  paramMin     = {-15f, -15f, -15f, 0.1f, 0.0f, 0.5f, -1.0f};
+        final float[]  paramMax     = {+15f, +15f, +15f, 2.0f, 1.0f, 2.0f,  1.0f};
+        final float[]  paramDefault = {  0f,   0f,   0f, 1.0f, 0.8f, 1.0f,  0.0f};
+
+        final Runnable[] refreshRef    = new Runnable[1];
+        final Runnable[] highlightRef  = new Runnable[1];
+
+        android.widget.LinearLayout root = new android.widget.LinearLayout(this);
+        root.setOrientation(android.widget.LinearLayout.VERTICAL);
+        root.setPadding(18, 12, 18, 8);
+
+        // ── Header: label + ⏹ Stop button ──────────────────────────────────
+        android.widget.LinearLayout headerRow = new android.widget.LinearLayout(this);
+        headerRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        headerRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        headerRow.setLayoutParams(new android.widget.LinearLayout.LayoutParams(-1, -2));
+        android.widget.TextView tvPadLabel = new android.widget.TextView(this);
+        tvPadLabel.setText("▼ Tap a pad to select & preview:");
+        tvPadLabel.setTextColor(0xFFCCCCCC);
+        tvPadLabel.setTextSize(12f);
+        tvPadLabel.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, -2, 1f));
+        headerRow.addView(tvPadLabel);
+        android.widget.Button btnStop = new android.widget.Button(this);
+        btnStop.setText("⏹ Stop");
+        btnStop.setTextSize(11f);
+        btnStop.setTextColor(0xFFFFFFFF);
+        btnStop.setBackgroundColor(0xFF880000);
+        android.widget.LinearLayout.LayoutParams stopLP =
+            new android.widget.LinearLayout.LayoutParams(-2, -2);
+        stopLP.setMargins(8, 0, 0, 0);
+        btnStop.setLayoutParams(stopLP);
+        btnStop.setOnClickListener(vv -> {
+            try {
+                if (audioEngine != null) {
+                    int slot = editB ? selPad[0] + 8 : selPad[0];
+                    audioEngine.stopPad(slot);
+                    if (lastPreviewPadIdx == slot) lastPreviewPadIdx = -1;
+                }
+            } catch (Exception ignored) {}
+        });
+        headerRow.addView(btnStop);
+        root.addView(headerRow);
+
+        // ── 8 pad buttons (2 rows × 4 columns) ─────────────────────────────
+        final android.widget.Button[] padBtns = new android.widget.Button[8];
+        android.widget.LinearLayout.LayoutParams rowsLP =
+            new android.widget.LinearLayout.LayoutParams(-1, -2);
+        rowsLP.setMargins(0, 0, 0, 12);
+        for (int row = 0; row < 2; row++) {
+            android.widget.LinearLayout padRowLL = new android.widget.LinearLayout(this);
+            padRowLL.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            padRowLL.setLayoutParams(rowsLP);
+            for (int col = 0; col < 4; col++) {
+                final int padIdx = row * 4 + col;
+                android.widget.Button pb = new android.widget.Button(this);
+                pb.setText("P" + (padIdx + 1));
+                pb.setTextSize(13f);
+                pb.setTextColor(0xFFFFFFFF);
+                pb.setBackgroundColor(padIdx == selPad[0] ? 0xFFFF6600 : 0xFF333355);
+                android.widget.LinearLayout.LayoutParams pbLP =
+                    new android.widget.LinearLayout.LayoutParams(0, 110, 1f);
+                pbLP.setMargins(4, 4, 4, 4);
+                pb.setLayoutParams(pbLP);
+                pb.setOnClickListener(vv -> {
+                    selPad[0] = padIdx;
+                    if (highlightRef[0] != null) highlightRef[0].run();
+                    if (refreshRef[0] != null) refreshRef[0].run();
+                    // Stop previous preview before playing new one — single active preview
+                    try {
+                        if (audioEngine != null && lastPreviewPadIdx >= 0) {
+                            audioEngine.stopPad(lastPreviewPadIdx);
+                        }
+                    } catch (Exception ignored) {}
+                    // Real-time preview with current working params
+                    try {
+                        AudioEngine.SampleData sd = (editB ? samplesB : samples)[padIdx];
+                        if (sd != null && sd.loaded && audioEngine != null) {
+                            int slot = editB ? padIdx + 8 : padIdx;
+                            audioEngine.playSample(slot, sd,
+                                wVol[padIdx] * wGain[padIdx], 1.0f, wPitch[padIdx], 0,
+                                (editB ? padDelayOnB : padDelayOn)[padIdx],
+                                (editB ? padDelayTimeB : padDelayTime)[padIdx],
+                                (editB ? padDelayLevelB : padDelayLevel)[padIdx],
+                                wEqL[padIdx], wEqM[padIdx], wEqH[padIdx],
+                                 (editB ? padChokeGroupB : padChokeGroup)[padIdx],
+                                 0f, 0f, wPan[padIdx]);
+                            lastPreviewPadIdx = slot;
+                        }
+                    } catch (Exception ignored) {}
+                });
+                padBtns[padIdx] = pb;
+                padRowLL.addView(pb);
+            }
+            root.addView(padRowLL);
+        }
+
+        // ── 7 parameter seekbars ───────────────────────────────────────────
+        final android.widget.SeekBar[] seeks  = new android.widget.SeekBar[7];
+        final android.widget.TextView[] vTxts = new android.widget.TextView[7];
+        for (int p = 0; p < 7; p++) {
+            android.widget.LinearLayout paramRow = new android.widget.LinearLayout(this);
+            paramRow.setOrientation(android.widget.LinearLayout.VERTICAL);
+            android.widget.LinearLayout.LayoutParams rowLP =
+                new android.widget.LinearLayout.LayoutParams(-1, -2);
+            rowLP.setMargins(0, 4, 0, 4);
+            paramRow.setLayoutParams(rowLP);
+
+            android.widget.LinearLayout labelRow = new android.widget.LinearLayout(this);
+            labelRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            android.widget.TextView tvLabel = new android.widget.TextView(this);
+            tvLabel.setText(paramLabels[p]);
+            tvLabel.setTextColor(0xFFAAAA88);
+            tvLabel.setTextSize(11f);
+            tvLabel.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, -2, 1f));
+            labelRow.addView(tvLabel);
+            android.widget.TextView tvVal = new android.widget.TextView(this);
+            float initVal = wArrays[p][selPad[0]];
+            tvVal.setText(String.format(java.util.Locale.US, "%.2f", initVal));
+            tvVal.setTextColor(0xFFFFFF88);
+            tvVal.setTextSize(11f);
+            tvVal.setGravity(android.view.Gravity.END);
+            tvVal.setLayoutParams(new android.widget.LinearLayout.LayoutParams(-2, -2));
+            labelRow.addView(tvVal);
+            vTxts[p] = tvVal;
+            paramRow.addView(labelRow);
+
+            final int pi = p;
+            android.widget.SeekBar seek = new android.widget.SeekBar(this);
+            seek.setMax(200);
+            float range = paramMax[pi] - paramMin[pi];
+            seek.setProgress(Math.round((initVal - paramMin[pi]) / range * 200f));
+            seek.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(android.widget.SeekBar s, int progress, boolean fromUser) {
+                    if (!fromUser) return;
+                    int pad = selPad[0];
+                    float val = paramMin[pi] + (progress / 200f) * (paramMax[pi] - paramMin[pi]);
+                    wArrays[pi][pad] = val;
+                    vTxts[pi].setText(String.format(java.util.Locale.US, "%.2f", val));
+                }
+                @Override public void onStartTrackingTouch(android.widget.SeekBar s) {}
+                @Override public void onStopTrackingTouch(android.widget.SeekBar s) {
+                    // Live preview on release — stop previous preview first
+                    int pad = selPad[0];
+                    try {
+                        if (audioEngine != null && lastPreviewPadIdx >= 0) {
+                            audioEngine.stopPad(lastPreviewPadIdx);
+                        }
+                    } catch (Exception ignored) {}
+                    try {
+                        AudioEngine.SampleData sd = (editB ? samplesB : samples)[pad];
+                        if (sd != null && sd.loaded && audioEngine != null) {
+                            int slot = editB ? pad + 8 : pad;
+                            audioEngine.playSample(slot, sd,
+                                wVol[pad] * wGain[pad], 1.0f, wPitch[pad], 0,
+                                (editB ? padDelayOnB : padDelayOn)[pad],
+                                (editB ? padDelayTimeB : padDelayTime)[pad],
+                                (editB ? padDelayLevelB : padDelayLevel)[pad],
+                                wEqL[pad], wEqM[pad], wEqH[pad],
+                                 (editB ? padChokeGroupB : padChokeGroup)[pad],
+                                 0f, 0f, wPan[pad]);
+                            lastPreviewPadIdx = slot;
+                        }
+                    } catch (Exception ignored) {}
+                }
+            });
+            seeks[pi] = seek;
+            paramRow.addView(seek);
+            root.addView(paramRow);
+        }
+
+        // Wire refresh/highlight runnables now that seeks[]/padBtns[] are built
+        refreshRef[0] = () -> {
+            int pad = selPad[0];
+            for (int pi2 = 0; pi2 < 7; pi2++) {
+                float val = wArrays[pi2][pad];
+                float range = paramMax[pi2] - paramMin[pi2];
+                seeks[pi2].setProgress(Math.round((val - paramMin[pi2]) / range * 200f));
+                vTxts[pi2].setText(String.format(java.util.Locale.US, "%.2f", val));
+            }
+        };
+        highlightRef[0] = () -> {
+            for (int i = 0; i < 8; i++) {
+                padBtns[i].setBackgroundColor(i == selPad[0] ? 0xFFFF6600 : 0xFF333355);
+            }
+        };
+
+        // ── Reset this pad ─────────────────────────────────────────────────
+        android.widget.Button btnRst = new android.widget.Button(this);
+        btnRst.setText("↩ Reset This Pad to Default");
+        btnRst.setBackgroundColor(0xFF440000);
+        btnRst.setTextColor(0xFFFFFFFF);
+        btnRst.setTextSize(11f);
+        android.widget.LinearLayout.LayoutParams rstLP =
+            new android.widget.LinearLayout.LayoutParams(-1, -2);
+        rstLP.setMargins(0, 10, 0, 4);
+        btnRst.setLayoutParams(rstLP);
+        btnRst.setOnClickListener(vv -> {
+            int pad = selPad[0];
+            for (int pi2 = 0; pi2 < 7; pi2++) {
+                wArrays[pi2][pad] = paramDefault[pi2];
+                float range = paramMax[pi2] - paramMin[pi2];
+                seeks[pi2].setProgress(Math.round((paramDefault[pi2] - paramMin[pi2]) / range * 200f));
+                vTxts[pi2].setText(String.format(java.util.Locale.US, "%.2f", paramDefault[pi2]));
+            }
+            // Reset re-applies defaults to live audio immediately — replay a
+            // preview with default params so the user hears them right away.
+            try {
+                AudioEngine.SampleData sd = (editB ? samplesB : samples)[pad];
+                if (sd != null && sd.loaded && audioEngine != null) {
+                    int slot = editB ? pad + 8 : pad;
+                    if (lastPreviewPadIdx >= 0) audioEngine.stopPad(lastPreviewPadIdx);
+                    audioEngine.playSample(slot, sd,
+                        paramDefault[3] * paramDefault[4], 1.0f, paramDefault[5], 0,
+                        false, 0f, 0f,
+                        paramDefault[0], paramDefault[1], paramDefault[2],
+                         (editB ? padChokeGroupB : padChokeGroup)[pad],
+                         0f, 0f, paramDefault[6]);
+                    lastPreviewPadIdx = slot;
+                }
+            } catch (Exception ignored) {}
+        });
+        root.addView(btnRst);
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(root);
+
+        final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
+            .setTitle(editB ? "🎛️ Pad Edit (BANK B) — EQ / Gain / Pitch / Pan"
+                            : "🎛️ Pad Edit — EQ / Gain / Pitch / Pan")
+            .setView(sv)
+            .setPositiveButton("💾 Save to Kit", (d, w) -> {
+                if (editB) {
+                    System.arraycopy(wEqH,   0, padEqHighB, 0, 8);
+                    System.arraycopy(wEqM,   0, padEqMidB,  0, 8);
+                    System.arraycopy(wEqL,   0, padEqLowB,  0, 8);
+                    System.arraycopy(wGain,  0, padGainB,   0, 8);
+                    System.arraycopy(wVol,   0, padVolumeB, 0, 8);
+                    System.arraycopy(wPitch, 0, padPitchB,  0, 8);
+                    System.arraycopy(wPan,   0, padPanB,    0, 8);
+                } else {
+                    System.arraycopy(wEqH,   0, padEqHigh,  0, 8);
+                    System.arraycopy(wEqM,   0, padEqMid,   0, 8);
+                    System.arraycopy(wEqL,   0, padEqLow,   0, 8);
+                    System.arraycopy(wGain,  0, padGain,    0, 8);
+                    System.arraycopy(wVol,   0, padVolume,  0, 8);
+                    System.arraycopy(wPitch, 0, padPitch,   0, 8);
+                    System.arraycopy(wPan,   0, padPan,     0, 8);
+                }
+                // saveKitToMemory persists BOTH banks under their own indices
+                saveKitToMemory(kitIndex);
+                // Refresh the bank-aware top-bar seekbars to the saved values
+                if (seekVolume != null) {
+                    seekVolume.setProgress((int)((editB ? padVolumeB[selectedPad]
+                                                        : padVolume[selectedPad]) * 100.0f));
+                }
+                Toast.makeText(this, "✅ Pad Edit saved to kit!", Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("Cancel", null)
+            .create();
+        dlg.setOnDismissListener(d -> {
+            // Stop any preview still ringing when the dialog closes
+            try {
+                if (audioEngine != null && lastPreviewPadIdx >= 0) {
+                    audioEngine.stopPad(lastPreviewPadIdx);
+                }
+            } catch (Exception ignored) {}
+            lastPreviewPadIdx = -1;
+        });
+        dlg.show();
+        android.view.Window wnd = dlg.getWindow();
+        if (wnd != null) {
+            wnd.setLayout((int)(getResources().getDisplayMetrics().widthPixels * 0.62f),
+                android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    public void copyPadSound(int fromPad, int toPad) {
+        if (fromPad == toPad) {
+            return;
+        }
+        // ── Bank-aware copy: operate on the active bank's arrays ─────────────
+        if (bankMode == BANK_B) {
+            Uri srcUri = this.selectedWavUrisB[fromPad];
+            this.selectedWavUrisB[toPad]  = srcUri;
+            this.selectedRawResIdsB[toPad] = this.selectedRawResIdsB[fromPad];
+            this.padVolumeB[toPad]     = this.padVolumeB[fromPad];
+            this.padPitchB[toPad]      = this.padPitchB[fromPad];
+            this.padDelayOnB[toPad]    = this.padDelayOnB[fromPad];
+            this.padDelayTimeB[toPad]  = this.padDelayTimeB[fromPad];
+            this.padDelayLevelB[toPad] = this.padDelayLevelB[fromPad];
+            this.padEqHighB[toPad]     = this.padEqHighB[fromPad];
+            this.padEqMidB[toPad]      = this.padEqMidB[fromPad];
+            this.padEqLowB[toPad]      = this.padEqLowB[fromPad];
+            this.padChokeGroupB[toPad] = this.padChokeGroupB[fromPad];
+            try {
+                if (srcUri != null) {
+                    this.samplesB[toPad] = this.audioEngine.loadWavFromUri(toPad + 8, srcUri);
+                } else {
+                    int rawId = this.selectedRawResIdsB[toPad];
+                    this.samplesB[toPad] = (rawId != 0) ? this.audioEngine.loadRawSound(toPad + 8, rawId) : null;
+                }
+            } catch (IOException e) {
+                this.samplesB[toPad] = null;
+                Toast.makeText(this, "Error copying sound: " + e.getMessage(), 0).show();
+            }
+        } else {
+            // Bank A (or Layer — copy applies to Bank A)
+            Uri[] uriArr = this.selectedWavUris;
+            Uri uri = uriArr[fromPad];
+            uriArr[toPad] = uri;
+            int[] iArr = this.selectedRawResIds;
+            iArr[toPad] = iArr[fromPad];
+            float[] fArr = this.padVolume;
+            fArr[toPad] = fArr[fromPad];
+            float[] fArr2 = this.padPitch;
+            fArr2[toPad] = fArr2[fromPad];
+            boolean[] zArr = this.padDelayOn;
+            zArr[toPad] = zArr[fromPad];
+            float[] fArr3 = this.padDelayTime;
+            fArr3[toPad] = fArr3[fromPad];
+            float[] fArr4 = this.padDelayLevel;
+            fArr4[toPad] = fArr4[fromPad];
+            float[] fArr5 = this.padEqHigh;
+            fArr5[toPad] = fArr5[fromPad];
+            float[] fArr6 = this.padEqMid;
+            fArr6[toPad] = fArr6[fromPad];
+            float[] fArr7 = this.padEqLow;
+            fArr7[toPad] = fArr7[fromPad];
+            int[] iArr2 = this.padChokeGroup;
+            iArr2[toPad] = iArr2[fromPad];
+            try {
+                if (uri != null) {
+                    this.samples[toPad] = this.audioEngine.loadWavFromUri(toPad, uri);
+                } else {
+                    int i = iArr[toPad];
+                    this.samples[toPad] = (i != 0) ? this.audioEngine.loadRawSound(toPad, i) : null;
+                }
+            } catch (IOException e) {
+                this.samples[toPad] = null;
+                Toast.makeText(this, "Error copying sound: " + e.getMessage(), 0).show();
+            }
+        }
+        saveKitToMemory(this.kitIndex);
+        Toast.makeText(this, "Copied PAD " + (fromPad + 1) + " -> PAD " + (toPad + 1), 0).show();
+    }
+
+    public void swapPadSound(int padA, int padB) {
+        if (padA == padB) {
+            return;
+        }
+        // ── Bank-aware swap: operate on the active bank's arrays ─────────────
+        try {
+            if (bankMode == BANK_B) {
+                // Swap Bank B arrays
+                Uri tempUri = this.selectedWavUrisB[padA];
+                this.selectedWavUrisB[padA] = this.selectedWavUrisB[padB];
+                this.selectedWavUrisB[padB] = tempUri;
+                int tempRaw = this.selectedRawResIdsB[padA];
+                this.selectedRawResIdsB[padA] = this.selectedRawResIdsB[padB];
+                this.selectedRawResIdsB[padB] = tempRaw;
+                float tempVol = this.padVolumeB[padA];
+                this.padVolumeB[padA] = this.padVolumeB[padB];
+                this.padVolumeB[padB] = tempVol;
+                float tempPitch = this.padPitchB[padA];
+                this.padPitchB[padA] = this.padPitchB[padB];
+                this.padPitchB[padB] = tempPitch;
+                boolean tempDly = this.padDelayOnB[padA];
+                this.padDelayOnB[padA] = this.padDelayOnB[padB];
+                this.padDelayOnB[padB] = tempDly;
+                float tempDlyT = this.padDelayTimeB[padA];
+                this.padDelayTimeB[padA] = this.padDelayTimeB[padB];
+                this.padDelayTimeB[padB] = tempDlyT;
+                float tempDlyL = this.padDelayLevelB[padA];
+                this.padDelayLevelB[padA] = this.padDelayLevelB[padB];
+                this.padDelayLevelB[padB] = tempDlyL;
+                float tempEqH = this.padEqHighB[padA];
+                this.padEqHighB[padA] = this.padEqHighB[padB];
+                this.padEqHighB[padB] = tempEqH;
+                float tempEqM = this.padEqMidB[padA];
+                this.padEqMidB[padA] = this.padEqMidB[padB];
+                this.padEqMidB[padB] = tempEqM;
+                float tempEqL = this.padEqLowB[padA];
+                this.padEqLowB[padA] = this.padEqLowB[padB];
+                this.padEqLowB[padB] = tempEqL;
+                int tempChoke = this.padChokeGroupB[padA];
+                this.padChokeGroupB[padA] = this.padChokeGroupB[padB];
+                this.padChokeGroupB[padB] = tempChoke;
+                // Reload swapped Bank B native slots (8-15)
+                Uri uriA = this.selectedWavUrisB[padA];
+                if (uriA != null) this.samplesB[padA] = this.audioEngine.loadWavFromUri(padA + 8, uriA);
+                else { int r = this.selectedRawResIdsB[padA]; this.samplesB[padA] = (r != 0) ? this.audioEngine.loadRawSound(padA + 8, r) : null; }
+                Uri uriB = this.selectedWavUrisB[padB];
+                if (uriB != null) this.samplesB[padB] = this.audioEngine.loadWavFromUri(padB + 8, uriB);
+                else { int r = this.selectedRawResIdsB[padB]; this.samplesB[padB] = (r != 0) ? this.audioEngine.loadRawSound(padB + 8, r) : null; }
+            } else {
+                // Swap Bank A arrays (also used in Layer mode)
+                Uri[] uriArr = this.selectedWavUris;
+                Uri tempUri = uriArr[padA];
+                uriArr[padA] = uriArr[padB];
+                uriArr[padB] = tempUri;
+                int[] iArr = this.selectedRawResIds;
+                int tempRaw = iArr[padA];
+                iArr[padA] = iArr[padB];
+                iArr[padB] = tempRaw;
+                float[] fArr = this.padVolume;
+                float tempVol = fArr[padA]; fArr[padA] = fArr[padB]; fArr[padB] = tempVol;
+                float[] fArr2 = this.padPitch;
+                float tempPitch = fArr2[padA]; fArr2[padA] = fArr2[padB]; fArr2[padB] = tempPitch;
+                boolean[] zArr = this.padDelayOn;
+                boolean tempDly = zArr[padA]; zArr[padA] = zArr[padB]; zArr[padB] = tempDly;
+                float[] fArr3 = this.padDelayTime;
+                float tempDlyT = fArr3[padA]; fArr3[padA] = fArr3[padB]; fArr3[padB] = tempDlyT;
+                float[] fArr4 = this.padDelayLevel;
+                float tempDlyL = fArr4[padA]; fArr4[padA] = fArr4[padB]; fArr4[padB] = tempDlyL;
+                float[] fArr5 = this.padEqHigh;
+                float tempEqH = fArr5[padA]; fArr5[padA] = fArr5[padB]; fArr5[padB] = tempEqH;
+                float[] fArr6 = this.padEqMid;
+                float tempEqM = fArr6[padA]; fArr6[padA] = fArr6[padB]; fArr6[padB] = tempEqM;
+                float[] fArr7 = this.padEqLow;
+                float tempEqL = fArr7[padA]; fArr7[padA] = fArr7[padB]; fArr7[padB] = tempEqL;
+                int[] fArr8 = this.padChokeGroup;
+                int tempChoke = fArr8[padA]; fArr8[padA] = fArr8[padB]; fArr8[padB] = tempChoke;
+                // Reload swapped Bank A native slots (0-7)
+                Uri uriA = uriArr[padA];
+                if (uriA != null) this.samples[padA] = this.audioEngine.loadWavFromUri(padA, uriA);
+                else { int r = iArr[padA]; this.samples[padA] = (r != 0) ? this.audioEngine.loadRawSound(padA, r) : null; }
+                Uri uriB = uriArr[padB];
+                if (uriB != null) this.samples[padB] = this.audioEngine.loadWavFromUri(padB, uriB);
+                else { int r = iArr[padB]; this.samples[padB] = (r != 0) ? this.audioEngine.loadRawSound(padB, r) : null; }
+            }
+        } catch (IOException e) {
+            Toast.makeText(this, "Error swapping sounds: " + e.getMessage(), 0).show();
+        }
+        saveKitToMemory(this.kitIndex);
+        Toast.makeText(this, "Swapped PAD " + (padA + 1) + " <-> PAD " + (padB + 1), 0).show();
+    }
+
+    @Override // android.app.Activity
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        Uri uri;
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != -1 || data == null || (uri = data.getData()) == null) {
+            return;
+        }
+        // onActivityResult is called BEFORE onResume(). If the file-picker caused
+        // onStop() to fire (which sets audioEngine = null), we must recreate the
+        // engine here before any audio operation. When onResume() then runs it will
+        // see audioEngine != null and call reinitStream() only — the samples loaded
+        // below (loadKitFromFolder / loadWavFromUri) remain intact in the engine.
+        if (this.audioEngine == null) {
+            AudioEngine eng = new AudioEngine(this);
+            this.audioEngine = eng;
+            eng.start();
+            // ── Restore existing Bank A+B sounds into the fresh engine ──────────
+            // onStop() destroyed the old engine. We must reload all previously
+            // loaded sounds so that e.g. switching Bank mode then loading a new
+            // folder kit doesn't silently lose the other bank's sounds.
+            try { loadKitFromMemory(this.kitIndex); } catch (Exception ignored) {}
+        }
+        try {
+            if (requestCode == REQ_PICK_SINGLE_WAV) {
+                int takeFlags = data.getFlags() & 3;
+                getContentResolver().takePersistableUriPermission(uri, takeFlags);
+                int i = this.selectedPad;
+                // ── Bank-aware single WAV load ─────────────────────────────
+                if (this.bankMode == BANK_B) {
+                    this.selectedWavUrisB[i] = uri;
+                    this.selectedRawResIdsB[i] = 0;
+                    this.samplesB[i] = this.audioEngine.loadWavFromUri(i + 8, uri);
+                    if (this.samplesB[i] != null) {
+                        this.audioEngine.preloadSample(this.samplesB[i]);
+                    }
+                } else {
+                    this.selectedWavUris[i] = uri;
+                    this.selectedRawResIds[i] = 0;
+                    this.samples[i] = this.audioEngine.loadWavFromUri(i, uri);
+                    if (this.samples[i] != null) {
+                        this.audioEngine.preloadSample(this.samples[i]);
+                    }
+                }
+                saveKitToMemory(this.kitIndex);
+                Toast.makeText(this, "Sound Loaded & Saved!", 0).show();
+            } else if (requestCode == REQ_LOAD_FOLDER) {
+                getContentResolver().takePersistableUriPermission(uri, 1);
+                loadKitFromFolder(uri);
+                // ── Persist individual file URI permissions so sounds survive app restart ──
+                // takePersistableUriPermission is called on the folder tree URI above, but
+                // individual child-document URIs also need their permissions persisted so
+                // loadKitFromMemory() can open them after a process restart.
+                for (int pi = 0; pi < 8; pi++) {
+                    try {
+                        if (selectedWavUris[pi] != null)
+                            getContentResolver().takePersistableUriPermission(selectedWavUris[pi], 1);
+                    } catch (Exception ignored) {}
+                    try {
+                        if (selectedWavUrisB[pi] != null)
+                            getContentResolver().takePersistableUriPermission(selectedWavUrisB[pi], 1);
+                    } catch (Exception ignored) {}
+                }
+                saveKitToMemory(this.kitIndex);
+            } else if (requestCode == REQ_SAVE_FOLDER) {
+                getContentResolver().takePersistableUriPermission(uri, 3);
+                String str = this.pendingSaveKitName;
+                if (str != null && str.length() > 0) {
+                    String str2 = this.pendingSaveKitName;
+                    this.currentKitName = str2;
+                    this.txtKitName.setText(str2);
+                }
+                saveKitToFolder(uri);
+                this.pendingSaveKitName = null;
+            } else if (requestCode == REQ_LIST_FOLDER) {
+                getContentResolver().takePersistableUriPermission(uri, 3);
+                this.prefs.edit().putString(KEY_LAST_LIST_FOLDER_URI, uri.toString()).apply();
+                showKitListDialog(uri);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Permission Error: " + e.getMessage(), 0).show();
+        }
+    }
+
+    public void showSaveKitNameDialog() {
+        final EditText edt = new EditText(this);
+        edt.setHint("Enter Kit Name");
+        edt.setText(this.currentKitName);
+        new AlertDialog.Builder(this).setTitle("Save Kit As").setView(edt).setPositiveButton("NEXT", new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.22
+
+
+            @Override // android.content.DialogInterface.OnClickListener
+            public void onClick(DialogInterface dialog, int which) {
+                String name = edt.getText().toString().trim();
+                if (name.length() != 0) {
+                    MainActivity.this.pendingSaveKitName = MainActivity.this.sanitizeFileName(name);
+                    MainActivity.this.startActivityForResult(new Intent("android.intent.action.OPEN_DOCUMENT_TREE"), MainActivity.REQ_SAVE_FOLDER);
+                    return;
+                }
+                Toast.makeText(MainActivity.this, "Kit name required!", 0).show();
+            }
+        }).setNegativeButton("Cancel", (DialogInterface.OnClickListener) null).show();
+    }
+
+    public void renameKitDialog() {
+        final EditText edt = new EditText(this);
+        edt.setText(this.currentKitName);
+        new AlertDialog.Builder(this).setTitle("Enter Kit Name").setView(edt).setPositiveButton("OK", new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.23
+
+
+            @Override // android.content.DialogInterface.OnClickListener
+            public void onClick(DialogInterface d, int w) {
+                MainActivity.this.currentKitName = edt.getText().toString().trim();
+                if (MainActivity.this.currentKitName.length() == 0) {
+                    MainActivity.this.currentKitName = "KIT " + MainActivity.this.kitIndex;
+                }
+                MainActivity.this.txtKitName.setText(MainActivity.this.currentKitName);
+                MainActivity mainActivity = MainActivity.this;
+                Log.i(MainActivity.TAG, "renameKitDialog: saving kit name='" + MainActivity.this.currentKitName + "' for kitNo=" + mainActivity.kitIndex);
+                mainActivity.saveKitToMemory(mainActivity.kitIndex);
+            }
+        }).setNegativeButton("Cancel", (DialogInterface.OnClickListener) null).show();
+    }
+
+    public String sanitizeFileName(String name) {
+        return name.replace("/", "_").replace("\\", "_").replace(":", "_").replace("*", "_").replace("?", "_").replace("\"", "_").replace("<", "_").replace(">", "_").replace("|", "_");
+    }
+
+    public void saveKitToMemory(int kitNo) {
+        // During onCreate, initSeekBars fires onProgressChanged which calls
+        // saveKitToMemory before kitIndex/currentKitName are restored from prefs.
+        // Skip those stale saves to avoid overwriting real kit data with defaults.
+        if (!this.initialized) {
+            Log.w(TAG, "saveKitToMemory: SKIPPED (not initialized yet) kitNo=" + kitNo);
+            return;
+        }
+        Log.i(TAG, "saveKitToMemory: saving kitNo=" + kitNo + " name='" + this.currentKitName + "'");
+        SharedPreferences.Editor editor = this.prefs.edit();
+        editor.putString("kit_name_" + kitNo, this.currentKitName);
+        for (int i = 0; i < 8; i++) {
+            // Bank A
+            editor.putFloat("kit_" + kitNo + "_vol_" + i, this.padVolume[i]);
+            editor.putFloat("kit_" + kitNo + "_pitch_" + i, this.padPitch[i]);
+            editor.putBoolean("kit_" + kitNo + "_dlyon_" + i, this.padDelayOn[i]);
+            editor.putFloat("kit_" + kitNo + "_dlyt_" + i, this.padDelayTime[i]);
+            editor.putFloat("kit_" + kitNo + "_dlyl_" + i, this.padDelayLevel[i]);
+            editor.putFloat("kit_" + kitNo + "_eqh_" + i, this.padEqHigh[i]);
+            editor.putFloat("kit_" + kitNo + "_eqm_" + i, this.padEqMid[i]);
+            editor.putFloat("kit_" + kitNo + "_eql_" + i, this.padEqLow[i]);
+            editor.putFloat("kit_" + kitNo + "_gain_" + i, this.padGain[i]);
+            editor.putFloat("kit_" + kitNo + "_pan_" + i,  this.padPan[i]);
+            editor.putInt("kit_" + kitNo + "_choke_" + i, this.padChokeGroup[i]);
+            // Do not write sound references until the async loader has finished
+            // loading this exact kit. The arrays still contain the previous kit
+            // during a kit switch, so writing them here corrupts the new kit.
+            if (this.loadedSoundKitA == kitNo) {
+                if (this.selectedWavUris[i] != null) {
+                    editor.putString("kit_" + kitNo + "_uri_" + i, this.selectedWavUris[i].toString());
+                    editor.remove("kit_" + kitNo + "_raw_" + i);
+                } else if (this.selectedRawResIds[i] != 0) {
+                    editor.remove("kit_" + kitNo + "_uri_" + i);
+                    editor.putInt("kit_" + kitNo + "_raw_" + i, this.selectedRawResIds[i]);
+                } else {
+                    editor.remove("kit_" + kitNo + "_uri_" + i);
+                    editor.remove("kit_" + kitNo + "_raw_" + i);
+                }
+            }
+            // Bank B — saved to Bank B's OWN kit index (independent of Bank A's kitNo)
+            int kB = this.kitIndexB;
+            editor.putFloat("kit_" + kB + "_B_vol_" + i, this.padVolumeB[i]);
+            editor.putFloat("kit_" + kB + "_B_pitch_" + i, this.padPitchB[i]);
+            editor.putBoolean("kit_" + kB + "_B_dlyon_" + i, this.padDelayOnB[i]);
+            editor.putFloat("kit_" + kB + "_B_dlyt_" + i, this.padDelayTimeB[i]);
+            editor.putFloat("kit_" + kB + "_B_dlyl_" + i, this.padDelayLevelB[i]);
+            editor.putFloat("kit_" + kB + "_B_eqh_" + i, this.padEqHighB[i]);
+            editor.putFloat("kit_" + kB + "_B_eqm_" + i, this.padEqMidB[i]);
+            editor.putFloat("kit_" + kB + "_B_eql_" + i, this.padEqLowB[i]);
+            editor.putFloat("kit_" + kB + "_B_gain_" + i, this.padGainB[i]);
+            editor.putFloat("kit_" + kB + "_B_pan_" + i,  this.padPanB[i]);
+            editor.putInt("kit_" + kB + "_B_choke_" + i, this.padChokeGroupB[i]);
+            if (this.loadedSoundKitB == kB) {
+                if (this.selectedWavUrisB[i] != null) {
+                    editor.putString("kit_" + kB + "_B_uri_" + i, this.selectedWavUrisB[i].toString());
+                    editor.remove("kit_" + kB + "_B_raw_" + i);
+                } else if (this.selectedRawResIdsB[i] != 0) {
+                    editor.remove("kit_" + kB + "_B_uri_" + i);
+                    editor.putInt("kit_" + kB + "_B_raw_" + i, this.selectedRawResIdsB[i]);
+                } else {
+                    editor.remove("kit_" + kB + "_B_uri_" + i);
+                    editor.remove("kit_" + kB + "_B_raw_" + i);
+                }
+            }
+        }
+        if (this.assistSoundUri != null) {
+            editor.putString("kit_" + kitNo + "_assist_uri", this.assistSoundUri.toString());
+        } else {
+            editor.remove("kit_" + kitNo + "_assist_uri");
+        }
+        // commit() (not apply()) — synchronous write so kit data survives an
+        // immediate process kill (recent-apps swipe). apply()'s async flush
+        // can be lost when the process is terminated before it runs.
+        editor.commit();
+    }
+
+
+    public void loadKitFromMemory(int kitNo) {
+        if (this.audioEngine == null) {
+            Log.w(TAG, "loadKitFromMemory: audioEngine is null, skipping load for kitNo=" + kitNo);
+            return;
+        }
+        Log.i(TAG, "loadKitFromMemory: loading kitNo=" + kitNo);
+        if (kitNo >= 1 && kitNo <= this.presetKitNames.length) {
+            this.currentPresetKit = kitNo - 1;
+            this.currentKitName = this.prefs.getString("kit_name_" + kitNo, this.presetKitNames[this.currentPresetKit]);
+        } else {
+            // Manual kits do not have a preset index. Use the first built-in
+            // kit only as a deterministic fallback for missing pad files.
+            this.currentPresetKit = 0;
+            this.currentKitName = this.prefs.getString("kit_name_" + kitNo, "KIT " + kitNo);
+        }
+        this.currentKitNameB = this.prefs.getString("kit_name_B_" + this.kitIndexB, "KIT B:" + this.kitIndexB);
+        if (this.bankMode == BANK_B) this.txtKitName.setText(this.currentKitNameB);
+        else this.txtKitName.setText(this.currentKitName);
+        Log.i(TAG, "loadKitFromMemory: kitA=" + kitNo + " '" + this.currentKitName + "' kitB=" + this.kitIndexB + " '" + this.currentKitNameB + "'");
+
+        for (int i = 0; i < 8; i++) {
+            this.padVolume[i] = this.prefs.getFloat("kit_" + kitNo + "_vol_" + i, 0.8f);
+            this.padPitch[i] = this.prefs.getFloat("kit_" + kitNo + "_pitch_" + i, 1.0f);
+            this.padDelayOn[i] = this.prefs.getBoolean("kit_" + kitNo + "_dlyon_" + i, false);
+            this.padDelayTime[i] = this.prefs.getFloat("kit_" + kitNo + "_dlyt_" + i, 150.0f);
+            this.padDelayLevel[i] = this.prefs.getFloat("kit_" + kitNo + "_dlyl_" + i, 0.5f);
+            this.padEqHigh[i] = this.prefs.getFloat("kit_" + kitNo + "_eqh_" + i, 0.0f);
+            this.padEqMid[i] = this.prefs.getFloat("kit_" + kitNo + "_eqm_" + i, 0.0f);
+            this.padEqLow[i] = this.prefs.getFloat("kit_" + kitNo + "_eql_" + i, 0.0f);
+            this.padGain[i] = this.prefs.getFloat("kit_" + kitNo + "_gain_" + i, 1.0f);
+            this.padPan[i]  = this.prefs.getFloat("kit_" + kitNo + "_pan_" + i, 0.0f);
+            this.padChokeGroup[i] = this.prefs.getInt("kit_" + kitNo + "_choke_" + i, 0);
+        }
+        String assistUriStr = this.prefs.getString("kit_" + kitNo + "_assist_uri", null);
+        if (assistUriStr != null) this.assistSoundUri = Uri.parse(assistUriStr);
+        else this.assistSoundUri = null;
+
+        int kB = this.kitIndexB;
+        for (int i = 0; i < 8; i++) {
+            this.padVolumeB[i]     = this.prefs.getFloat("kit_" + kB + "_B_vol_" + i, 0.8f);
+            this.padPitchB[i]      = this.prefs.getFloat("kit_" + kB + "_B_pitch_" + i, 1.0f);
+            this.padDelayOnB[i]    = this.prefs.getBoolean("kit_" + kB + "_B_dlyon_" + i, false);
+            this.padDelayTimeB[i]  = this.prefs.getFloat("kit_" + kB + "_B_dlyt_" + i, 150.0f);
+            this.padDelayLevelB[i] = this.prefs.getFloat("kit_" + kB + "_B_dlyl_" + i, 0.5f);
+            this.padEqHighB[i]     = this.prefs.getFloat("kit_" + kB + "_B_eqh_" + i, 0.0f);
+            this.padEqMidB[i]      = this.prefs.getFloat("kit_" + kB + "_B_eqm_" + i, 0.0f);
+            this.padEqLowB[i]      = this.prefs.getFloat("kit_" + kB + "_B_eql_" + i, 0.0f);
+            this.padGainB[i]       = this.prefs.getFloat("kit_" + kB + "_B_gain_" + i, 1.0f);
+            this.padPanB[i]        = this.prefs.getFloat("kit_" + kB + "_B_pan_" + i, 0.0f);
+            this.padChokeGroupB[i] = this.prefs.getInt("kit_" + kB + "_B_choke_" + i, 0);
+        }
+        if (this.bankMode == BANK_B) {
+            this.seekVolume.setProgress((int) (this.padVolumeB[this.selectedPad] * 100.0f));
+            this.seekPitch.setProgress((int) ((this.padPitchB[this.selectedPad] - 0.5f) * 100.0f));
+        } else {
+            this.seekVolume.setProgress((int) (this.padVolume[this.selectedPad] * 100.0f));
+            this.seekPitch.setProgress((int) ((this.padPitch[this.selectedPad] - 0.5f) * 100.0f));
+        }
+
+        // Stop voices from the old kit before its sample slots are replaced.
+        // This prevents an already-playing old voice from being heard together
+        // with the newly selected kit.
+        this.audioEngine.stopAll();
+        final int gen = ++this.kitLoadGeneration;
+        final int kA = kitNo, kBk = this.kitIndexB;
+        final int fallbackPresetA = (kitNo >= 1 && kitNo <= this.presetKitNames.length)
+                ? kitNo - 1 : 0;
+        final int fallbackPresetB = (kBk >= 1 && kBk <= this.presetKitNames.length)
+                ? kBk - 1 : 0;
+        this.loadedSoundKitA = -1;
+        this.loadedSoundKitB = -1;
+        // Persist the loaded kit index every time a kit is loaded — regardless of
+        // how the user got here (prev/next buttons, jump dialog, favorite, folder
+        // load, restart). Some paths only bump kitIndex in memory; without this,
+        // an app restart could come back on whatever index was in prefs (often 1).
+        // commit() (not apply()) — synchronous write survives immediate process kill.
+        prefs.edit().putInt(KEY_KIT_INDEX, kitNo).commit();
+        this.kitLoadExecutor.execute(() ->
+                loadKitSamplesBackground(kA, kBk, gen, fallbackPresetA, fallbackPresetB));
+    }
+
+    private void loadKitSamplesBackground(final int kitNo, final int kitB, final int gen,
+                                          final int fallbackPresetA, final int fallbackPresetB) {
+        final AudioEngine engine = this.audioEngine;
+        if (engine == null) return;
+        final Uri[]     urisA = new Uri[8];
+        final int[]     rawsA = new int[8];
+        final short[][] pcmsA = new short[8][];
+        for (int i = 0; i < 8; i++) {
+            if (gen != this.kitLoadGeneration) return;
+            try {
+                String uriStr = this.prefs.getString("kit_" + kitNo + "_uri_" + i, null);
+                int rawResId  = this.prefs.getInt("kit_" + kitNo + "_raw_" + i, 0);
+                if (uriStr != null) {
+                    urisA[i] = Uri.parse(uriStr);
+                    pcmsA[i] = engine.decodeUriToPcm(urisA[i]);
+                    if (pcmsA[i] == null) {
+                        // The saved child URI no longer opens (document-picker grant
+                        // expired across restart — child URIs don't persist, only the
+                        // tree grant does). Re-resolve the WAV via the persisted tree
+                        // grant + kit folder name, then retry the decode.
+                        Uri r = resolveKitWavFromTree(kitNo, i, false);
+                        if (r != null) { urisA[i] = r; pcmsA[i] = engine.decodeUriToPcm(r); }
+                    }
+                } else if (rawResId != 0) {
+                    rawsA[i] = rawResId;
+                    pcmsA[i] = engine.decodeRawToPcm(rawResId);
+                } else {
+                    rawsA[i] = this.presetKits[fallbackPresetA][i];
+                    pcmsA[i] = engine.decodeRawToPcm(rawsA[i]);
+                }
+                // A missing/expired manual URI or an invalid saved raw resource
+                // must still replace the native slot with a known sample. Keep
+                // the URI reference above so a later permission restore can use it.
+                if (pcmsA[i] == null || pcmsA[i].length == 0) {
+                    int fallbackRaw = this.presetKits[fallbackPresetA][i];
+                    short[] fallbackPcm = engine.decodeRawToPcm(fallbackRaw);
+                    if (fallbackPcm != null && fallbackPcm.length > 0) {
+                        pcmsA[i] = fallbackPcm;
+                        if (urisA[i] == null) rawsA[i] = fallbackRaw;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        final Uri[]     urisB = new Uri[8];
+        final int[]     rawsB = new int[8];
+        final short[][] pcmsB = new short[8][];
+        for (int i = 0; i < 8; i++) {
+            if (gen != this.kitLoadGeneration) return;
+            try {
+                String uriBStr = this.prefs.getString("kit_" + kitB + "_B_uri_" + i, null);
+                int rawBResId  = this.prefs.getInt("kit_" + kitB + "_B_raw_" + i, 0);
+                if (uriBStr != null) {
+                    urisB[i] = Uri.parse(uriBStr);
+                    pcmsB[i] = engine.decodeUriToPcm(urisB[i]);
+                    if (pcmsB[i] == null) {
+                        Uri r = resolveKitWavFromTree(kitB, i, true);
+                        if (r != null) { urisB[i] = r; pcmsB[i] = engine.decodeUriToPcm(r); }
+                    }
+                } else if (rawBResId != 0) {
+                    rawsB[i] = rawBResId;
+                    pcmsB[i] = engine.decodeRawToPcm(rawBResId);
+                } else {
+                    rawsB[i] = this.presetKits[fallbackPresetB][i];
+                    pcmsB[i] = engine.decodeRawToPcm(rawsB[i]);
+                }
+                if (pcmsB[i] == null || pcmsB[i].length == 0) {
+                    int fallbackRaw = this.presetKits[fallbackPresetB][i];
+                    short[] fallbackPcm = engine.decodeRawToPcm(fallbackRaw);
+                    if (fallbackPcm != null && fallbackPcm.length > 0) {
+                        pcmsB[i] = fallbackPcm;
+                        if (urisB[i] == null) rawsB[i] = fallbackRaw;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        if (gen != this.kitLoadGeneration) return;
+        this.runOnUiThread(() -> {
+            if (gen != this.kitLoadGeneration) return;
+            for (int i = 0; i < 8; i++) {
+                this.selectedWavUris[i]   = urisA[i]; this.selectedRawResIds[i] = rawsA[i];
+                if (pcmsA[i] != null && pcmsA[i].length > 0) {
+                    engine.uploadPcm(i, pcmsA[i]);
+                    AudioEngine.SampleData sd = new AudioEngine.SampleData(); sd.uri = urisA[i]; sd.soundId = i; sd.loaded = true;
+                    this.samples[i] = sd;
+                } else { this.samples[i] = null; }
+            }
+            for (int i = 0; i < 8; i++) {
+                this.selectedWavUrisB[i]   = urisB[i]; this.selectedRawResIdsB[i] = rawsB[i];
+                if (pcmsB[i] != null && pcmsB[i].length > 0) {
+                    engine.uploadPcm(i + 8, pcmsB[i]);
+                    AudioEngine.SampleData sd = new AudioEngine.SampleData(); sd.uri = urisB[i]; sd.soundId = i + 8; sd.loaded = true;
+                    this.samplesB[i] = sd;
+                } else { this.samplesB[i] = null; }
+            }
+            // Publish ownership only after both banks have been atomically
+            // applied on the UI thread. Saves before this point preserve the
+            // existing per-kit references instead of copying stale arrays.
+            this.loadedSoundKitA = kitNo;
+            this.loadedSoundKitB = kitB;
+        });
+    }
+
+
+    public void loadKitFromFolder(Uri folderUri) throws IOException {
+        int i;
+        String folderName;
+        DocumentFile dataFile = null;
+        DocumentFile kitFolder = null;
+        JSONArray dlyLArray = null;
+        JSONArray eqHArray = null;
+        DocumentFile kitFolder2 = null;
+        // Invalidate any in-flight background load (loadKitSamplesBackground started
+        // by onActivityResult's audioEngine-recreate path). That background thread
+        // would otherwise finish AFTER we synchronously load the folder's WAVs and
+        // overwrite them with the previous kit's samples — making it look like the
+        // folder kit loaded (toast shown) but the pads stay silent/wrong.
+        this.kitLoadGeneration++;
+        this.audioEngine.stopAll();
+        try {
+            DocumentFile kitFolder3 = DocumentFile.fromTreeUri(this, folderUri);
+            if (kitFolder3 == null) {
+                Toast.makeText(this, "Folder not found!", 0).show();
+                return;
+            }
+            // ── Bank-aware WAV loading ─────────────────────────────────────────
+            // Bank A mode  → load into Bank A slots (0-7)
+            // Bank B mode  → load into Bank B slots (8-15)
+            // A+B Layer    → load into BOTH banks simultaneously
+            boolean loadIntoA = (bankMode != BANK_B);
+            boolean loadIntoB = (bankMode == BANK_B || bankMode == LAYER_AB);
+            int fallbackPresetA = (this.kitIndex >= 1 && this.kitIndex <= this.presetKitNames.length)
+                    ? this.kitIndex - 1 : 0;
+            int fallbackPresetB = (this.kitIndexB >= 1 && this.kitIndexB <= this.presetKitNames.length)
+                    ? this.kitIndexB - 1 : 0;
+            int i2 = 0;
+            while (true) {
+                i = 8;
+                if (i2 >= 8) {
+                    break;
+                }
+                DocumentFile wav = kitFolder3.findFile(KitManager.DEFAULT_WAV_NAMES[i2]);
+                if (wav != null) {
+                    if (loadIntoA) {
+                        this.selectedWavUris[i2]  = wav.getUri();
+                        this.selectedRawResIds[i2] = 0;
+                        this.samples[i2] = this.audioEngine.loadWavFromUri(i2, wav.getUri());
+                        if (this.samples[i2] == null) {
+                            this.samples[i2] = this.audioEngine.loadRawSound(
+                                    i2, this.presetKits[fallbackPresetA][i2]);
+                        }
+                        if (this.samples[i2] != null) this.audioEngine.preloadSample(this.samples[i2]);
+                    }
+                    if (loadIntoB) {
+                        this.selectedWavUrisB[i2]  = wav.getUri();
+                        this.selectedRawResIdsB[i2] = 0;
+                        this.samplesB[i2] = this.audioEngine.loadWavFromUri(i2 + 8, wav.getUri());
+                        if (this.samplesB[i2] == null) {
+                            this.samplesB[i2] = this.audioEngine.loadRawSound(
+                                    i2 + 8, this.presetKits[fallbackPresetB][i2]);
+                        }
+                        if (this.samplesB[i2] != null) this.audioEngine.preloadSample(this.samplesB[i2]);
+                    }
+                } else {
+                    int rawIdA = this.presetKits[fallbackPresetA][i2];
+                    int rawIdB = this.presetKits[fallbackPresetB][i2];
+                    if (loadIntoA) {
+                        this.selectedWavUris[i2]  = null;
+                        this.selectedRawResIds[i2] = rawIdA;
+                        this.samples[i2] = this.audioEngine.loadRawSound(i2, rawIdA);
+                        if (this.samples[i2] != null) this.audioEngine.preloadSample(this.samples[i2]);
+                    }
+                    if (loadIntoB) {
+                        this.selectedWavUrisB[i2]  = null;
+                        this.selectedRawResIdsB[i2] = rawIdB;
+                        this.samplesB[i2] = this.audioEngine.loadRawSound(i2 + 8, rawIdB);
+                        if (this.samplesB[i2] != null) this.audioEngine.preloadSample(this.samplesB[i2]);
+                    }
+                }
+                i2++;
+            }
+            String folderName2 = kitFolder3.getName();
+            if (folderName2 != null) {
+                String stripped = folderName2.replace(".mcn", "");
+                if (bankMode == BANK_B) {
+                    // Bank B mode: update Bank B's kit name and display
+                    this.currentKitNameB = "B:" + stripped;
+                    this.txtKitName.setText(this.currentKitNameB);
+                    prefs.edit().putString("kit_name_B_" + this.kitIndexB, this.currentKitNameB).commit();
+                } else if (bankMode == LAYER_AB) {
+                    // A+B Layer mode: update both bank names from the same folder
+                    this.currentKitName  = stripped;
+                    this.currentKitNameB = "B:" + stripped;
+                    this.txtKitName.setText(stripped + " [A+B]");
+                    prefs.edit().putString("kit_name_B_" + this.kitIndexB, this.currentKitNameB).commit();
+                } else {
+                    // Bank A mode
+                    this.currentKitName = stripped;
+                    this.txtKitName.setText(stripped);
+                }
+            }
+            DocumentFile dataFile2 = kitFolder3.findFile("kit_data.json");
+            if (dataFile2 != null) {
+                Exception lastException = null;
+                InputStream is = null;
+                try {
+                    is = getContentResolver().openInputStream(dataFile2.getUri());
+                } catch (Exception e) {
+                    lastException = e;
+                }
+                if (is != null) {
+                    BufferedReader reader2 = new BufferedReader(new InputStreamReader(is));
+                    StringBuilder sb2 = new StringBuilder();
+                    while (true) {
+                        String line = reader2.readLine();
+                        if (line == null) {
+                            break;
+                        }
+                        DocumentFile kitFolder4 = kitFolder3;
+                        String folderName3 = folderName2;
+                        DocumentFile dataFile3 = dataFile2;
+                        try {
+                            sb2.append(line);
+                        } catch (Exception e2) {
+                            lastException = e2;
+                        }
+                        if (lastException != null) {
+                            lastException.printStackTrace();
+                        }
+                        dataFile2 = dataFile3;
+                        kitFolder3 = kitFolder4;
+                        folderName2 = folderName3;
+                        i = 8;
+                    }
+                    is.close();
+                    JSONObject jsonData = new JSONObject(sb2.toString());
+                    JSONArray volArray = jsonData.optJSONArray("volume");
+                    JSONArray pitchArray = jsonData.optJSONArray("pitch");
+                    JSONArray dlyOnArray = jsonData.optJSONArray("delayOn");
+                    JSONArray dlyTArray = jsonData.optJSONArray("delayTime");
+                    JSONArray dlyLArray2 = jsonData.optJSONArray("delayLevel");
+                    JSONArray dlyLArray3 = jsonData.optJSONArray("eqHigh");
+                    JSONArray eqHArray2 = jsonData.optJSONArray("eqMid");
+                    JSONArray eqLArray = jsonData.optJSONArray("eqLow");
+                    // ── Bank-aware JSON param loading ──────────────────────────────
+                    try {
+                        JSONArray chokeArray = jsonData.optJSONArray("chokeGroup");
+                        for (int i3 = 0; i3 < 8; i3++) {
+                            try {
+                                float vol   = volArray   != null ? (float) volArray.getDouble(i3)   : 0.8f;
+                                float pitch = pitchArray != null ? (float) pitchArray.getDouble(i3) : 1.0f;
+                                boolean dlyOn  = dlyOnArray != null && dlyOnArray.getBoolean(i3);
+                                float dlyT  = dlyTArray  != null ? (float) dlyTArray.getDouble(i3)  : 150f;
+                                float dlyL  = dlyLArray2 != null ? (float) dlyLArray2.getDouble(i3) : 0.5f;
+                                float eqH   = dlyLArray3 != null ? (float) dlyLArray3.getDouble(i3) : 0f;
+                                float eqM   = eqHArray2  != null ? (float) eqHArray2.getDouble(i3)  : 0f;
+                                float eqL   = eqLArray   != null ? (float) eqLArray.getDouble(i3)   : 0f;
+                                int   choke = chokeArray != null ? chokeArray.getInt(i3)             : 0;
+                                if (loadIntoA) {
+                                    this.padVolume[i3]     = vol;
+                                    this.padPitch[i3]      = pitch;
+                                    this.padDelayOn[i3]    = dlyOn;
+                                    this.padDelayTime[i3]  = dlyT;
+                                    this.padDelayLevel[i3] = dlyL;
+                                    this.padEqHigh[i3]     = eqH;
+                                    this.padEqMid[i3]      = eqM;
+                                    this.padEqLow[i3]      = eqL;
+                                    this.padChokeGroup[i3] = choke;
+                                }
+                                if (loadIntoB) {
+                                    this.padVolumeB[i3]     = vol;
+                                    this.padPitchB[i3]      = pitch;
+                                    this.padDelayOnB[i3]    = dlyOn;
+                                    this.padDelayTimeB[i3]  = dlyT;
+                                    this.padDelayLevelB[i3] = dlyL;
+                                    this.padEqHighB[i3]     = eqH;
+                                    this.padEqMidB[i3]      = eqM;
+                                    this.padEqLowB[i3]      = eqL;
+                                    this.padChokeGroupB[i3] = choke;
+                                }
+                            } catch (Exception ignored2) {}
+                        }
+                    } catch (Exception e14) {
+                    }
+                }
+            }
+            // Refresh seekbars for the active bank's pad, then persist
+            refreshSeekBarsForCurrentBankAndPad();
+            if (loadIntoA) this.loadedSoundKitA = this.kitIndex;
+            if (loadIntoB) this.loadedSoundKitB = this.kitIndexB;
+            saveKitToMemory(this.kitIndex);
+            // ── Persist URI permissions for the folder kit IMMEDIATELY ──────────
+            // The document-picker grant is temporary and expires as soon as the
+            // activity resumes. If we don't takePersistableUriPermission() now, a
+            // background decode (or a later app restart) can no longer open these
+            // WAVs → the kit appears to "reset"/go silent. Doing it here (inside
+            // loadKitFromFolder) covers BOTH entry points (direct folder picker and
+            // the kit-list dialog).
+            for (int pi = 0; pi < 8; pi++) {
+                persistUriReadPermission(selectedWavUris[pi]);
+                persistUriReadPermission(selectedWavUrisB[pi]);
+            }
+            // ── Save the TREE grant + kit folder name for restart-resolve ───────
+            // takePersistableUriPermission() on child document URIs SILENTLY FAILS
+            // (SecurityException) — tree children don't get their own persistable
+            // grant. The folder's TREE grant IS persistable, so we persist that and
+            // remember the kit folder name. On app restart, if a saved child URI no
+            // longer opens (permission gone), loadKitSamplesBackground re-resolves
+            // the WAV via DocumentFile.fromTreeUri(root).findFile(folder).findFile(name).
+            String kitFolderNameSaved = null;
+            try { kitFolderNameSaved = kitFolder3.getName(); } catch (Exception ignored) {}
+            if (kitFolderNameSaved != null) {
+                SharedPreferences.Editor ted = this.prefs.edit();
+                if (loadIntoA) {
+                    ted.putString("kit_" + this.kitIndex + "_tree_uri", folderUri.toString());
+                    ted.putString("kit_" + this.kitIndex + "_folder_name", kitFolderNameSaved);
+                }
+                if (loadIntoB) {
+                    ted.putString("kit_" + this.kitIndexB + "_B_tree_uri", folderUri.toString());
+                    ted.putString("kit_" + this.kitIndexB + "_B_folder_name", kitFolderNameSaved);
+                }
+                ted.putInt(KEY_KIT_INDEX, this.kitIndex);   // folder load targets the current kit
+                ted.putInt("kit_index_B", this.kitIndexB);
+                // commit() so kit index + tree grant + folder name survive an
+                // immediate process kill (recent-apps swipe).
+                ted.commit();
+            }
+            // ── Restore the OTHER bank synchronously (race-free) ────────────────
+            // The folder load above only touched the ACTIVE bank's samples. When the
+            // audio engine was recreated (file picker fired onStop() → engine null),
+            // the other bank's samples were never loaded into the fresh engine — so
+            // after loading a folder kit into Bank B, Bank A went silent. We restore
+            // the other bank from prefs HERE on the calling thread: deterministic and
+            // immune to the async race that background loadKitFromMemory had (that
+            // race's late decode could hit the persisted URIs before the folder
+            // picker's temporary grant was taken over, silently failing → empty bank).
+            if (bankMode == BANK_A) {
+                restoreBankSamplesSync(false);      // restore Bank B
+            } else if (bankMode == BANK_B) {
+                restoreBankSamplesSync(true);       // restore Bank A
+            }
+            // LAYER_AB → both banks were already loaded from the folder above.
+            Toast.makeText(this, "Kit Loaded Successfully!", 0).show();
+        } catch (Exception ignored) {
+            ignored.printStackTrace();
+            Toast.makeText(this, "Load Error: " + ignored.getMessage(), 0).show();
+        }
+    }
+
+    /** Persist read access to a kit WAV uri so it survives an app restart. */
+    private void persistUriReadPermission(Uri uri) {
+        if (uri == null) return;
+        try { getContentResolver().takePersistableUriPermission(uri, 1); } catch (Exception ignored) {}
+    }
+
+    /**
+     * Re-resolve a kit WAV through the PERSISTED TREE grant. Child document URIs
+     * don't survive an app restart on their own (takePersistableUriPermission on
+     * a tree child throws SecurityException — only the TREE grant is persistable),
+     * so after a restart loadKitSamplesBackground re-opens the WAV from the saved
+     * tree URI. Two entry-point shapes are handled:
+     *   A) Direct folder picker (btnLoadKit): folderUri IS the kit folder → resolve
+     *      the WAV straight from it.
+     *   B) Kit-list dialog (showKitListDialog): folderUri is a tree CHILD (the .mcn
+     *      folder) whose own grant isn't persistable — but the persisted LIST root
+     *      tree URI + the saved kit folder name re-locate it.
+     * Strategy 1 covers A; if the WAV isn't found there, strategy 2 covers B.
+     */
+    private Uri resolveKitWavFromTree(int kitNo, int padIdx, boolean bankB) {
+        try {
+            // Prefer the persisted LIST ROOT tree grant (kit-list dialog) — it is
+            // always a persistable tree uri. Fall back to the direct folder picker's
+            // tree uri (which IS the kit folder).
+            String treeUriStr = this.prefs.getString(
+                    "kit_" + kitNo + (bankB ? "_B_list_root" : "_list_root"), null);
+            if (treeUriStr == null) treeUriStr = this.prefs.getString(
+                    "kit_" + kitNo + (bankB ? "_B_tree_uri" : "_tree_uri"), null);
+            String folderName = this.prefs.getString(
+                    "kit_" + kitNo + (bankB ? "_B_folder_name" : "_folder_name"), null);
+            if (treeUriStr == null) return null;
+            DocumentFile kitFolder = DocumentFile.fromTreeUri(this, Uri.parse(treeUriStr));
+            if (kitFolder == null) return null;
+            // Strategy 1 — treeUri IS the kit folder (direct folder picker)
+            DocumentFile wav = kitFolder.findFile(KitManager.DEFAULT_WAV_NAMES[padIdx]);
+            if (wav == null && folderName != null) {
+                // Strategy 2 — treeUri is the LIST ROOT, folderName is the .mcn kit
+                // folder inside it (kit-list dialog entry point)
+                DocumentFile sub = kitFolder.findFile(folderName);
+                if (sub != null) wav = sub.findFile(KitManager.DEFAULT_WAV_NAMES[padIdx]);
+            }
+            return (wav != null) ? wav.getUri() : null;
+        } catch (Exception ignored) { return null; }
+    }
+
+    /**
+     * Synchronously reload one bank's samples from prefs. Called after loading a
+     * folder kit into the other bank, to restore the bank the folder load did not
+     * touch. Runs on the caller's thread (UI) — no async race, no generation
+     * invalidation, no stale-overwrite problem.
+     * @param bankA true → restore Bank A pads (slots 0-7); false → Bank B (slots 8-15)
+     */
+    private void restoreBankSamplesSync(boolean bankA) {
+        AudioEngine engine = this.audioEngine;
+        if (engine == null) return;
+        int kitNo = bankA ? this.kitIndex : this.kitIndexB;
+        int fallbackPreset = (kitNo >= 1 && kitNo <= this.presetKitNames.length)
+                ? kitNo - 1 : 0;
+        for (int i = 0; i < 8; i++) {
+            String uriStr = this.prefs.getString(
+                    "kit_" + kitNo + (bankA ? "_uri_" : "_B_uri_") + i, null);
+            int rawId = this.prefs.getInt(
+                    "kit_" + kitNo + (bankA ? "_raw_" : "_B_raw_") + i, 0);
+            int padIdx = bankA ? i : i + 8;
+            Uri savedUri = uriStr != null ? Uri.parse(uriStr) : null;
+            if (bankA) {
+                this.selectedWavUris[i] = savedUri;
+                this.selectedRawResIds[i] = rawId;
+            } else {
+                this.selectedWavUrisB[i] = savedUri;
+                this.selectedRawResIdsB[i] = rawId;
+            }
+            try {
+                if (uriStr != null) {
+                    Uri u = savedUri;
+                    AudioEngine.SampleData sd = engine.loadWavFromUri(padIdx, u);
+                    if (sd != null) {
+                        engine.preloadSample(sd);
+                    } else {
+                        // Keep the saved URI for a future permission restore, but
+                        // replace the native slot with a deterministic fallback now.
+                        sd = engine.loadRawSound(padIdx, this.presetKits[fallbackPreset][i]);
+                        if (sd != null) engine.preloadSample(sd);
+                    }
+                    if (bankA) this.samples[i] = sd; else this.samplesB[i] = sd;
+                } else if (rawId != 0) {
+                    AudioEngine.SampleData sd = engine.loadRawSound(padIdx, rawId);
+                    if (sd == null) sd = engine.loadRawSound(padIdx, this.presetKits[fallbackPreset][i]);
+                    if (sd != null) engine.preloadSample(sd);
+                    if (bankA) this.samples[i] = sd; else this.samplesB[i] = sd;
+                } else {
+                    // No saved uri/raw → fall back to the preset kit sound so the
+                    // bank is never left completely empty.
+                    int fallbackRaw = this.presetKits[fallbackPreset][i];
+                    if (bankA) {
+                        this.selectedWavUris[i] = null;
+                        this.selectedRawResIds[i] = fallbackRaw;
+                    } else {
+                        this.selectedWavUrisB[i] = null;
+                        this.selectedRawResIdsB[i] = fallbackRaw;
+                    }
+                    AudioEngine.SampleData sd = engine.loadRawSound(padIdx, fallbackRaw);
+                    if (sd != null) { engine.preloadSample(sd); if (bankA) this.samples[i] = sd; else this.samplesB[i] = sd; }
+                }
+            } catch (Exception ignored) {}
+        }
+        if (bankA) this.loadedSoundKitA = kitNo;
+        else this.loadedSoundKitB = kitNo;
+    }
+
+    private void saveKitToFolder(Uri folderUri) throws JSONException, IOException {
+        DocumentFile root;
+        DocumentFile dataFile;
+        JSONArray eqMArray;
+        JSONArray chokeArray;
+        int i2;
+        JSONArray eqLArray;
+        DocumentFile root2 = null;
+        try {
+            DocumentFile root3 = DocumentFile.fromTreeUri(this, folderUri);
+            if (root3 == null) {
+                Toast.makeText(this, "Folder access error!", 0).show();
+                return;
+            }
+            DocumentFile kitFolder = root3.findFile(this.currentKitName + ".mcn");
+            if (kitFolder == null) {
+                kitFolder = root3.createDirectory(this.currentKitName + ".mcn");
+            }
+            if (kitFolder == null) {
+                Toast.makeText(this, "Cannot create kit folder!", 0).show();
+                return;
+            }
+            int i22 = 0;
+            while (i22 < 8) {
+                int i23 = i22;
+                if (this.selectedWavUris[i23] != null || this.selectedRawResIds[i23] != 0) {
+                    DocumentFile old = kitFolder.findFile(KitManager.DEFAULT_WAV_NAMES[i23]);
+                    if (old != null) {
+                        old.delete();
+                    }
+                    DocumentFile dest = kitFolder.createFile("audio/wav", KitManager.DEFAULT_WAV_NAMES[i23]);
+                    if (dest != null) {
+                        Uri uri = this.selectedWavUris[i23];
+                        if (uri != null) {
+                            FileUtil.copyUriToUri(this, uri, dest.getUri());
+                        } else {
+                            int i3 = this.selectedRawResIds[i23];
+                            if (i3 != 0) {
+                                FileUtil.copyRawToUri(this, i3, dest.getUri());
+                            }
+                        }
+                    }
+                }
+                i22 = i23 + 1;
+            }
+            DocumentFile dataFile2 = kitFolder.findFile("kit_data.json");
+            if (dataFile2 != null) {
+                dataFile2.delete();
+            }
+            DocumentFile dataFile22 = kitFolder.createFile("application/json", "kit_data.json");
+            if (dataFile22 != null) {
+                try {
+                    JSONObject jsonData = new JSONObject();
+                    JSONArray volArray = new JSONArray();
+                    JSONArray pitchArray = new JSONArray();
+                    JSONArray dlyOnArray = new JSONArray();
+                    JSONArray dlyTArray = new JSONArray();
+                    JSONArray dlyLArray = new JSONArray();
+                    JSONArray eqHArray = new JSONArray();
+                    JSONArray eqMArray2 = new JSONArray();
+                    JSONArray eqLArray2 = new JSONArray();
+                    JSONArray chokeArray2 = new JSONArray();
+                    int i = 8;
+                    DocumentFile kitFolder2 = kitFolder;
+                    DocumentFile kitFolder3 = root3;
+                    int i4 = 0;
+                    while (i4 < i) {
+                        DocumentFile root22 = kitFolder3;
+                        DocumentFile kitFolder22 = kitFolder2;
+                        try {
+                            root = kitFolder3;
+                            dataFile = dataFile2;
+                            try {
+                                volArray.put(this.padVolume[i4]);
+                                pitchArray.put(this.padPitch[i4]);
+                                dlyOnArray.put(this.padDelayOn[i4]);
+                                dlyTArray.put(this.padDelayTime[i4]);
+                                dlyLArray.put(this.padDelayLevel[i4]);
+                                eqHArray.put(this.padEqHigh[i4]);
+                                eqMArray = eqMArray2;
+                                try {
+                                    eqMArray.put(this.padEqMid[i4]);
+                                    i2 = i22;
+                                    eqLArray = eqLArray2;
+                                    try {
+                                        eqLArray.put(this.padEqLow[i4]);
+                                        chokeArray = chokeArray2;
+                                    } catch (Exception e) {
+                                        chokeArray = chokeArray2;
+                                    }
+                                } catch (Exception e2) {
+
+                                    i2 = i22;
+                                    eqLArray = eqLArray2;
+                                    chokeArray = chokeArray2;
+                                }
+                                try {
+                                    chokeArray.put(this.padChokeGroup[i4]);
+                                    i4++;
+                                    root2 = root22;
+                                    kitFolder2 = kitFolder22;
+                                } catch (Exception e3) {
+
+                                    try {
+                                        e3.printStackTrace();
+                                        Toast.makeText(this, "Kit Saved: " + this.currentKitName, 0).show();
+                                        root2 = root;
+                                        eqLArray2 = eqLArray;
+                                        chokeArray2 = chokeArray;
+                                        i22 = i2;
+                                        kitFolder3 = root2;
+                                        eqMArray2 = eqMArray;
+                                        i = 8;
+                                        dataFile2 = dataFile;
+                                    } catch (Exception e4) {
+
+                                        e4.printStackTrace();
+                                        Toast.makeText(this, "Kit Saved: " + this.currentKitName, 0).show();
+                                    }
+                                }
+                            } catch (Exception e5) {
+
+                                eqMArray = eqMArray2;
+                                chokeArray = chokeArray2;
+                                i2 = i22;
+                                eqLArray = eqLArray2;
+                            }
+                        } catch (Exception e6) {
+
+                            root = kitFolder3;
+                            dataFile = dataFile2;
+                            eqMArray = eqMArray2;
+                            chokeArray = chokeArray2;
+                            i2 = i22;
+                            eqLArray = eqLArray2;
+                        }
+                        eqLArray2 = eqLArray;
+                        chokeArray2 = chokeArray;
+                        i22 = i2;
+                        kitFolder3 = root2;
+                        eqMArray2 = eqMArray;
+                        i = 8;
+                        dataFile2 = dataFile;
+                    }
+                    root = kitFolder3;
+                    jsonData.put("volume", volArray);
+                    jsonData.put("pitch", pitchArray);
+                    jsonData.put("delayOn", dlyOnArray);
+                    jsonData.put("delayTime", dlyTArray);
+                    jsonData.put("delayLevel", dlyLArray);
+                    jsonData.put("eqHigh", eqHArray);
+                    jsonData.put("eqMid", eqMArray2);
+                    jsonData.put("eqLow", eqLArray2);
+                    jsonData.put("chokeGroup", chokeArray2);
+                    OutputStream out = getContentResolver().openOutputStream(dataFile22.getUri());
+                    if (out != null) {
+                        out.write(jsonData.toString().getBytes());
+                        out.close();
+                    }
+                } catch (Exception e7) {
+
+                }
+            }
+            Toast.makeText(this, "Kit Saved: " + this.currentKitName, 0).show();
+        } catch (Exception e32) {
+            e32.printStackTrace();
+            Toast.makeText(this, "Save Error: " + e32.getMessage(), 0).show();
+        }
+    }
+
+    public void openListFolderPicker() {
+        Intent intent = new Intent("android.intent.action.OPEN_DOCUMENT_TREE");
+        intent.addFlags(1);
+        intent.addFlags(2);
+        intent.addFlags(64);
+        startActivityForResult(intent, REQ_LIST_FOLDER);
+    }
+
+    private void scanForMcnFolders(DocumentFile folder, ArrayList<DocumentFile> kitFolders, ArrayList<String> kitNames) {
+        DocumentFile[] listFiles;
+        String name;
+        for (DocumentFile file : folder.listFiles()) {
+            if (file != null && (name = file.getName()) != null && file.isDirectory()) {
+                if (name.toLowerCase().endsWith(".mcn")) {
+                    kitFolders.add(file);
+                    kitNames.add(name.substring(0, name.length() - 4));
+                } else {
+                    scanForMcnFolders(file, kitFolders, kitNames);
+                }
+            }
+        }
+    }
+
+    private void showKitListDialog(Uri folderUri) {
+        try {
+            DocumentFile root = DocumentFile.fromTreeUri(this, folderUri);
+            if (root == null || !root.exists() || !root.isDirectory()) {
+                Toast.makeText(this, "Invalid folder! Choose again.", 0).show();
+                openListFolderPicker();
+                return;
+            }
+            final ArrayList<DocumentFile> kitFolders = new ArrayList<>();
+            ArrayList<String> kitNames = new ArrayList<>();
+            scanForMcnFolders(root, kitFolders, kitNames);
+            if (kitNames.size() == 0) {
+                Toast.makeText(this, "No .mcn kit folders found in this folder!", 0).show();
+                return;
+            }
+            String[] items = (String[]) kitNames.toArray(new String[0]);
+            DialogInterface.OnClickListener onClickListener = null;
+            new AlertDialog.Builder(this).setTitle("Select Kit").setItems(items, new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.25
+
+
+                @Override // android.content.DialogInterface.OnClickListener
+                public void onClick(DialogInterface dialog, int which) {
+                    DocumentFile selectedKitFolder = (DocumentFile) kitFolders.get(which);
+                    try {
+                        MainActivity.this.loadKitFromFolder(selectedKitFolder.getUri());
+                    } catch (IOException e) {
+                        Toast.makeText(MainActivity.this, "Error loading kit: " + e.getMessage(), 0).show();
+                        e.printStackTrace();
+                    }
+                    MainActivity mainActivity = MainActivity.this;
+                    mainActivity.saveKitToMemory(mainActivity.kitIndex);
+                    // ── Persist the LIST ROOT tree uri for restart-resolve ─────────
+                    // selectedKitFolder is a tree CHILD (the .mcn kit folder) — child
+                    // grants don't survive a restart. The LIST ROOT tree grant WAS
+                    // persisted (takePersistableUriPermission in the REQ_LIST_FOLDER
+                    // branch), so save it alongside the kit folder name; the restart
+                    // decode re-enters root.findFile(kitFolder).findFile(Pad N.wav).
+                    SharedPreferences.Editor ted = mainActivity.prefs.edit();
+                    ted.putString("kit_" + mainActivity.kitIndex + "_list_root", folderUri.toString());
+                    ted.putString("kit_" + mainActivity.kitIndexB + "_B_list_root", folderUri.toString());
+                    ted.commit();
+                }
+            }).setNeutralButton("Change Folder", new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.24
+                @Override // android.content.DialogInterface.OnClickListener
+                public void onClick(DialogInterface dialog, int which) {
+                    MainActivity.this.openListFolderPicker();
+                }
+            }).setNegativeButton("Cancel", (DialogInterface.OnClickListener) null).show();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "List Error: " + e.getMessage(), 0).show();
+        }
+    }
+
+    // ── Kit navigation helpers ─────────────────────────────────────────────────
+
+    /** Single kit step; safe to call from any thread that owns the UI. */
+    private void changeKitBy(int direction) {
+        if (bankMode == BANK_B) {
+            // ── Bank B mode: change Bank B's kit independently ──────────────
+            int newKitB = kitIndexB + direction;
+            if (newKitB >= 1 && newKitB <= MAX_KITS) {
+                saveKitToMemory(kitIndex);           // flush Bank B to kitIndexB (see saveKitToMemory)
+                kitIndexB = newKitB;
+                prefs.edit().putInt("kit_index_B", kitIndexB).commit();
+                loadKitFromMemory(kitIndex);         // reloads Bank B from new kitIndexB
+                Toast.makeText(this,
+                    "🅱️ Bank B → Kit " + kitIndexB, Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            // ── Bank A (or Layer) mode: change Bank A's kit ─────────────────
+            if (direction < 0) {
+                if (kitIndex > 1) {
+                    saveKitToMemory(kitIndex);
+                    kitIndex--;
+                    prefs.edit().putInt(KEY_KIT_INDEX, kitIndex).commit();
+                    loadKitFromMemory(kitIndex);
+                }
+            } else {
+                if (kitIndex < MAX_KITS) {
+                    saveKitToMemory(kitIndex);
+                    kitIndex++;
+                    prefs.edit().putInt(KEY_KIT_INDEX, kitIndex).commit();
+                    loadKitFromMemory(kitIndex);
+                }
+            }
+        }
+    }
+
+    // ── Favorite Kit Bank (MainActivity) ──────────────────────────────────────
+    /** Load all 10 favorite slots from prefs. Called once from onCreate. */
+    public void loadFavorites() {
+        for (int i = 0; i < 10; i++) {
+            favKitA[i] = prefs.getInt(PREF_FAV_KIT_A     + i, 0);
+            favKitB[i] = prefs.getInt(PREF_FAV_KIT_B     + i, 0);
+            favBank[i] = prefs.getInt(PREF_FAV_BANK_MODE + i, 0);
+        }
+    }
+
+    /** Find + wire the 10 favorite buttons. Tap = load, long-press = save. */
+    private void setupFavorites() {
+        int[] ids = {R.id.favDrum1, R.id.favDrum2, R.id.favDrum3, R.id.favDrum4,
+                     R.id.favDrum5, R.id.favDrum6, R.id.favDrum7, R.id.favDrum8,
+                     R.id.favDrum9, R.id.favDrum10};
+        for (int i = 0; i < 10; i++) {
+            final int slot = i;
+            Button b = (Button) findViewById(ids[i]);
+            favDrumButtons[i] = b;
+            if (b == null) continue;
+            b.setOnClickListener(v -> loadFavorite(slot));
+            b.setOnLongClickListener(v -> {
+                saveFavorite(slot);
+                return true;
+            });
+        }
+        loadFavorites();
+        for (int i = 0; i < 10; i++) updateFavoriteButton(i);
+    }
+
+    /** Save the CURRENT kit setup (Bank A + B + mode) into favorite slot. */
+    public void saveFavorite(int slot) {
+        if (slot < 0 || slot >= 10) return;
+        // Flush current edits into the kit's persistent storage first
+        saveKitToMemory(kitIndex);
+        favKitA[slot] = kitIndex;
+        favKitB[slot] = kitIndexB;
+        favBank[slot] = bankMode;
+        prefs.edit()
+            .putInt(PREF_FAV_KIT_A     + slot, kitIndex)
+            .putInt(PREF_FAV_KIT_B     + slot, kitIndexB)
+            .putInt(PREF_FAV_BANK_MODE + slot, bankMode)
+            .commit();
+        updateFavoriteButton(slot);
+        Toast.makeText(this, "⭐ Favorite " + (slot + 1) + " saved: " + currentKitName,
+            Toast.LENGTH_SHORT).show();
+    }
+
+    /** Switch to a saved favorite — save current, then load the favorite's kit. */
+    public void loadFavorite(int slot) {
+        if (slot < 0 || slot >= 10) return;
+        if (favKitA[slot] < 1 || favKitA[slot] > MAX_KITS) {
+            Toast.makeText(this, "Favorite " + (slot + 1) + " khali hai (long-press se save karo)",
+                Toast.LENGTH_SHORT).show();
+            return;
+        }
+        saveKitToMemory(kitIndex);   // don't lose current setup
+        kitIndex = favKitA[slot];
+        kitIndexB = favKitB[slot] >= 1 ? favKitB[slot] : kitIndex;
+        bankMode = favBank[slot];
+        prefs.edit()
+            .putInt(KEY_KIT_INDEX, kitIndex)
+            .putInt("kit_index_B", kitIndexB)
+            .putInt("bank_mode",   bankMode)
+            .commit();
+        loadKitFromMemory(kitIndex);
+        updateBankToggleButton();
+        Toast.makeText(this, "⭐ Favorite " + (slot + 1) + " loaded: " + currentKitName,
+            Toast.LENGTH_SHORT).show();
+    }
+
+    /** Reflect a slot's fill-state on its button (filled = orange, empty = dark). */
+    public void updateFavoriteButton(int slot) {
+        Button b = (slot >= 0 && slot < favDrumButtons.length) ? favDrumButtons[slot] : null;
+        if (b != null) {
+            boolean filled = favKitA[slot] >= 1;
+            b.setText(filled ? "⭐" + (slot + 1) : "·" + (slot + 1));
+            b.setBackgroundResource(filled ? R.drawable.btn_3d_orange : R.drawable.btn_3d_dark);
+        }
+    }
+
+    /**
+     * Attaches a hold-to-repeat touch listener to a kit nav button.
+     * Behaviour: tap = 1 step; hold 500 ms → starts repeating at 300 ms,
+     * accelerates to 120 ms → 60 ms → 30 ms (Roland SPD-20 Pro feel).
+     */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private void setupKitHoldButton(Button btn, final int direction) {
+        btn.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    v.setPressed(true);
+                    changeKitBy(direction);
+                    kitRepeatRunnable = new Runnable() {
+                        private int step = 0;
+                        @Override public void run() {
+                            step++;
+                            changeKitBy(direction);
+                            long delay = step < 5 ? 300L : step < 15 ? 120L : step < 30 ? 60L : 30L;
+                            kitRepeatHandler.postDelayed(this, delay);
+                        }
+                    };
+                    kitRepeatHandler.postDelayed(kitRepeatRunnable, 500);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    v.setPressed(false);
+                    kitRepeatHandler.removeCallbacks(kitRepeatRunnable);
+                    kitRepeatRunnable = null;
+                    return true;
+            }
+            return false;
+        });
+    }
+
+    /** Tap kit name → number keyboard → jump directly to any kit 1-100. */
+    private void showKitJumpDialog() {
+        EditText et = new EditText(this);
+        et.setInputType(InputType.TYPE_CLASS_NUMBER);
+        et.setHint("1 – " + MAX_KITS);
+        et.setTextColor(0xffffffff);
+        et.setHintTextColor(0xff888888);
+        et.setGravity(Gravity.CENTER);
+        et.setTextSize(26);
+        et.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+
+        Runnable doJump = () -> {
+            String s = et.getText().toString().trim();
+            if (!s.isEmpty()) {
+                try {
+                    int target = Integer.parseInt(s);
+                    if (target >= 1 && target <= MAX_KITS) {
+                        saveKitToMemory(kitIndex);
+                        if (bankMode == BANK_B) {
+                            // Jump Bank B's kit independently
+                            kitIndexB = target;
+                            prefs.edit().putInt("kit_index_B", kitIndexB).commit();
+                        } else {
+                            kitIndex = target;
+                            prefs.edit().putInt(KEY_KIT_INDEX, kitIndex).commit();
+                        }
+                        loadKitFromMemory(kitIndex);
+                    } else {
+                        Toast.makeText(this, "1 se " + MAX_KITS + " ke beech daalo!", Toast.LENGTH_SHORT).show();
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+        };
+
+        AlertDialog dlg = new AlertDialog.Builder(this)
+            .setTitle("Kit number daalo (1–" + MAX_KITS + ")")
+            .setView(et)
+            .setNegativeButton("Cancel", null)
+            .create();
+
+        et.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                doJump.run();
+                dlg.dismiss();
+                return true;
+            }
+            return false;
+        });
+
+        dlg.show();
+        et.post(() -> {
+            et.requestFocus();
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(et, InputMethodManager.SHOW_IMPLICIT);
+        });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Override // android.app.Activity
+    protected void onPause() {
+        super.onPause();
+        this.isVisible = false;
+        // Persist kit indices explicitly so they survive a process kill between
+        // onPause and the next onCreate (changeKitBy/showKitJumpDialog already do
+        // this on navigation, but a folder-load without any navigation won't).
+        // commit() (not apply()) so the write hits disk synchronously — apply() is
+        // async and its queued flush can be lost on an immediate process kill,
+        // which made the app restart on kit 1 no matter what kit was loaded.
+        prefs.edit()
+            .putInt(KEY_KIT_INDEX, kitIndex)
+            .putInt("kit_index_B", kitIndexB)
+            .putInt("bank_mode", bankMode)
+            .commit();
+        saveKitToMemory(this.kitIndex);
+    }
+
+    @Override // android.app.Activity
+    protected void onStop() {
+        super.onStop();
+        // Cancel hold-repeat BEFORE stopping the engine.
+        // kitRepeatRunnable fires on the main thread; if it fires after
+        // audioEngine.stop() below, changeKitBy() → loadKitFromMemory() could
+        // encounter a stopped engine. Cancelling here prevents that entirely.
+        if (kitRepeatRunnable != null) {
+            kitRepeatHandler.removeCallbacks(kitRepeatRunnable);
+            kitRepeatRunnable = null;
+        }
+        saveKitToMemory(this.kitIndex);
+        // Stop the Oboe stream so it doesn't compete with LoopsActivity's
+        // stream (which would cause underruns / crackling / distortion).
+        // Use stopStream() (NOT stop()) — stop() destroys the whole native
+        // engine and sets nativeAvailable=false, so onResume's reinitStream()
+        // silently no-ops and sound never comes back after screen lock.
+        // stopStream() closes only the stream and keeps the engine + all
+        // loaded samples in memory; onResume reopens it via reinitStream().
+        if (this.audioEngine != null) {
+            try { this.audioEngine.stopStream(); } catch (Exception ignored) {}
+        }
+    }
+
+    @Override // android.app.Activity
+    protected void onDestroy() {
+        if (MainActivity.globalInstance == this) MainActivity.globalInstance = null;
+        if (ccKitDebounceRunnable != null) {
+            ccKitDebounceHandler.removeCallbacks(ccKitDebounceRunnable);
+            ccKitDebounceRunnable = null;
+        }
+        super.onDestroy();
+        if (deactivateListener != null && deactivateRef != null) {
+            deactivateRef.removeEventListener(deactivateListener);
+            deactivateListener = null;
+        }
+        teardownAudioRouting();   // unregister earphone / BT callbacks
+        saveKitToMemory(this.kitIndex);
+        try {
+            closeMidiDevice();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            AudioEngine audioEngine = this.audioEngine;
+            if (audioEngine != null) {
+                audioEngine.stop();
+                this.audioEngine = null;
+            }
+        } catch (Exception e2) {
+            e2.printStackTrace();
+        }
+    }
+
+    // ── Audio-routing helpers ─────────────────────────────────────────────────
+
+    /**
+     * Register two listeners so drum pads keep working when the user plugs
+     * or unplugs earphones / connects Bluetooth audio:
+     *
+     *   1. AudioDeviceCallback — fires on the main thread whenever an output
+     *      device is added or removed.  We reinit the Oboe stream so it opens
+     *      on the correct device at that device's native SR / burst size.
+     *
+     *   2. ACTION_AUDIO_BECOMING_NOISY receiver — fires when earphones are
+     *      suddenly unplugged and audio would otherwise blast from the speaker.
+     *      For drum pads (one-shot), we just reinit the stream; no loops to stop.
+     */
+    private void setupAudioRouting() {
+        final AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (am == null) return;
+
+        // 1. Device-change callback (earphone plug / BT connect & disconnect)
+        audioDeviceCallback = new AudioDeviceCallback() {
+            @Override
+            public void onAudioDevicesAdded(AudioDeviceInfo[] addedDevices) {
+                for (AudioDeviceInfo d : addedDevices) {
+                    if (d.isSink()) {
+                        reinitAudioForNewDevice(am);
+                        return;
+                    }
+                }
+            }
+            @Override
+            public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
+                for (AudioDeviceInfo d : removedDevices) {
+                    if (d.isSink()) {
+                        reinitAudioForNewDevice(am);
+                        return;
+                    }
+                }
+            }
+        };
+        am.registerAudioDeviceCallback(audioDeviceCallback,
+                new Handler(Looper.getMainLooper()));
+
+        // 2. Becoming-noisy receiver (earphone suddenly unplugged)
+        noisyReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context ctx, Intent intent) {
+                if (AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(intent.getAction())) {
+                    // Drum pads are one-shot — just reinit the stream so the
+                    // next hit routes to the speaker cleanly.
+                    reinitAudioForNewDevice(am);
+                }
+            }
+        };
+        registerReceiver(noisyReceiver,
+                new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
+    }
+
+    /** Unregister audio-routing listeners — called from onDestroy(). */
+    private void teardownAudioRouting() {
+        try {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null && audioDeviceCallback != null) {
+                am.unregisterAudioDeviceCallback(audioDeviceCallback);
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (noisyReceiver != null) unregisterReceiver(noisyReceiver);
+        } catch (Exception ignored) {}
+        audioDeviceCallback = null;
+        noisyReceiver       = null;
+    }
+
+    /**
+     * Reinit the Oboe stream with fresh AudioManager properties for the
+     * currently active output device (earphone / BT / speaker).
+     * Sample data stays loaded in the C++ engine — only the stream restarts.
+     */
+    private void reinitAudioForNewDevice(AudioManager am) {
+        final AudioEngine engine = this.audioEngine;
+        if (engine == null) return;
+        int nativeSR = 48000, nativeBurst = 256;
+        try {
+            String srStr    = am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE);
+            String burstStr = am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER);
+            if (srStr    != null && !srStr.isEmpty())    nativeSR    = Integer.parseInt(srStr);
+            if (burstStr != null && !burstStr.isEmpty()) nativeBurst = Integer.parseInt(burstStr);
+            if (nativeSR    < 8000  || nativeSR    > 192000) nativeSR    = 48000;
+            if (nativeBurst < 32    || nativeBurst > 8192)   nativeBurst = 256;
+        } catch (NumberFormatException ignored) {}
+        engine.reinitStream(nativeSR, nativeBurst);
+    }
+}

@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.pramod.soundstudio'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.pramod.soundstudio'
+        minSdk 23
+        targetSdk 35
+        versionCode 3
+        versionName '3.0.0'
+    }
+
+    buildTypes {
+        release { minifyEnabled false }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/NOTICE']
+        }
+    }
+}
+
+dependencies {
+    // ── Existing (unchanged) ──────────────────────────────────────────────
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core:1.9.0'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.cardview:cardview:1.0.0'
+
+    // ── v3.0: Zero new dependencies ───────────────────────────────────────
+    // RhythmSlicerEngine  — pure Java DSP, no libs
+    // EchoRecordingEngine — AudioRecord + circular buffer, no libs
+    // UniversalExportHelper — MediaStore + FileProvider (bundled in SDK/AndroidX)
+}
