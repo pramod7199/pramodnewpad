@@ -31,7 +31,8 @@ public final class AdminNotifications {
                     NOTIFICATION_PERMISSION_REQUEST);
         }
 
-        FirebaseMessaging.getInstance(AdminFirebaseApp.get(activity))
+        AdminFirebaseApp.get(activity);
+        FirebaseMessaging.getInstance()
                 .subscribeToTopic(TOPIC)
                 .addOnCompleteListener(task -> {
                     if (!task.isSuccessful()) {
@@ -54,7 +55,8 @@ public final class AdminNotifications {
     }
 
     static void subscribeToNewRequests(Context context) {
-        FirebaseMessaging.getInstance(AdminFirebaseApp.get(context))
+        AdminFirebaseApp.get(context);
+        FirebaseMessaging.getInstance()
                 .subscribeToTopic(TOPIC)
                 .addOnCompleteListener(task -> {
                     if (!task.isSuccessful()) {

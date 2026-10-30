@@ -21,7 +21,7 @@ import com.google.firebase.database.FirebaseDatabase;
  */
 public class AdminFirebaseApp {
 
-    private static final String APP_NAME = "AdminApp";
+    private static final String APP_NAME = FirebaseApp.DEFAULT_APP_NAME;
     private static final String PROJECT_ID = "pramod-octapad-loop";
     private static final String APPLICATION_ID = "1:1070428492610:android:463803a2e3c8dff1b0eedb";
     private static final String API_KEY = "AIzaSyAM5iLKu7EBcodDUgBiGadmIAsMv82yxhc";
