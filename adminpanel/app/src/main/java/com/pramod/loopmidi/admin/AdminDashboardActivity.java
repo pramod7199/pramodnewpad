@@ -23,8 +23,6 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.ValueEventListener;
-import com.google.firebase.functions.FirebaseFunctions;
-import com.google.firebase.functions.HttpsCallableResult;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,6 +36,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
     private DatabaseReference pendingRef;
     private DatabaseReference usersRef;
     private DatabaseReference deactivatedRef;
+    private DatabaseReference profilesRef;
 
     private LinearLayout pendingContainer;
     private LinearLayout activeContainer;
@@ -55,6 +54,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
     private ValueEventListener pendingListener;
     private ValueEventListener activeListener;
     private ValueEventListener deactivatedListener;
+    private ValueEventListener profilesListener;
     private int refreshPendingReads;
     private int refreshFailureCount;
     private StringBuilder refreshErrors;
@@ -96,12 +96,13 @@ public class AdminDashboardActivity extends AppCompatActivity {
         pendingRef = AdminFirebaseApp.database(this).getReference("pendingRequests");
         usersRef   = AdminFirebaseApp.database(this).getReference("authorizedUsers");
         deactivatedRef = AdminFirebaseApp.database(this).getReference("deactivatedUsers");
+        profilesRef = AdminFirebaseApp.database(this).getReference("users");
         buildUi();
         AdminNotifications.registerForNewRequests(this);
         listenPending();
         listenActive();
         listenDeactivated();
-        loadRegisteredUsers(false, null);
+        listenProfiles();
     }
 
     @Override
@@ -109,6 +110,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         if (pendingListener != null) pendingRef.removeEventListener(pendingListener);
         if (activeListener != null) usersRef.removeEventListener(activeListener);
         if (deactivatedListener != null) deactivatedRef.removeEventListener(deactivatedListener);
+        if (profilesListener != null) profilesRef.removeEventListener(profilesListener);
         super.onDestroy();
     }
 
@@ -414,6 +416,23 @@ public class AdminDashboardActivity extends AppCompatActivity {
         applySearchAndFilter();
     }
 
+    private void listenProfiles() {
+        profilesListener = new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot snapshot) {
+                updateProfiles(snapshot);
+            }
+
+            @Override
+            public void onCancelled(DatabaseError error) {
+                Toast.makeText(AdminDashboardActivity.this,
+                        "Registered user list error: " + error.getMessage(),
+                        Toast.LENGTH_LONG).show();
+            }
+        };
+        profilesRef.addValueEventListener(profilesListener);
+    }
+
     private interface SnapshotUpdate {
         void apply(DataSnapshot snapshot);
     }
@@ -429,7 +448,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         refreshReference(pendingRef, "Pending", this::updatePending);
         refreshReference(usersRef, "Active", this::updateActive);
         refreshReference(deactivatedRef, "Deactivated", this::updateDeactivated);
-        loadRegisteredUsers(true, this::completeRefreshRead);
+        refreshReference(profilesRef, "Registered users", this::updateProfiles);
     }
 
     private void refreshReference(DatabaseReference reference, String listName,
@@ -469,101 +488,19 @@ public class AdminDashboardActivity extends AppCompatActivity {
         refreshErrors.append(listName);
     }
 
-    private interface RegisteredUsersCallback {
-        void onComplete();
-    }
-
-    private void loadRegisteredUsers(boolean reportErrors, RegisteredUsersCallback callback) {
-        fetchRegisteredUsersPage(null, new ArrayList<>(), reportErrors, callback);
-    }
-
-    private void fetchRegisteredUsersPage(String pageToken, List<UserEntry> loadedUsers,
-                                          boolean reportErrors,
-                                          RegisteredUsersCallback callback) {
-        Map<String, Object> request = new HashMap<>();
-        if (!TextUtils.isEmpty(pageToken)) request.put("pageToken", pageToken);
-
-        FirebaseFunctions.getInstance("asia-southeast1")
-                .getHttpsCallable("listRegisteredUsers")
-                .call(request)
-                .addOnCompleteListener(this, task -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    if (!task.isSuccessful() || task.getResult() == null) {
-                        Exception error = task.getException();
-                        android.util.Log.e("AdminDashboard",
-                                "Registered user fetch failed", error);
-                        if (reportErrors) {
-                            recordRefreshFailure("Registered users");
-                            Toast.makeText(this,
-                                    "Registered user fetch failed: "
-                                            + (error != null ? error.getLocalizedMessage() : "Unknown error"),
-                                    Toast.LENGTH_LONG).show();
-                        } else {
-                            Toast.makeText(this,
-                                    "Registered users could not be loaded. Check Firebase Functions deployment.",
-                                    Toast.LENGTH_LONG).show();
-                        }
-                        if (callback != null) callback.onComplete();
-                        return;
-                    }
-
-                    Object rawData = task.getResult().getData();
-                    if (!(rawData instanceof Map)) {
-                        android.util.Log.e("AdminDashboard",
-                                "Registered user response was not an object");
-                        if (reportErrors) recordRefreshFailure("Registered users");
-                        else Toast.makeText(this,
-                                "Registered user data response was invalid.",
-                                Toast.LENGTH_LONG).show();
-                        if (callback != null) callback.onComplete();
-                        return;
-                    }
-
-                    Map<?, ?> result = (Map<?, ?>) rawData;
-                    Object rawUsers = result.get("users");
-                    if (!(rawUsers instanceof List)) {
-                        android.util.Log.e("AdminDashboard",
-                                "Registered user response did not contain a user list");
-                        if (reportErrors) recordRefreshFailure("Registered users");
-                        else Toast.makeText(this,
-                                "Registered user data response was invalid.",
-                                Toast.LENGTH_LONG).show();
-                        if (callback != null) callback.onComplete();
-                        return;
-                    }
-
-                    for (Object rawUser : (List<?>) rawUsers) {
-                        if (!(rawUser instanceof Map)) continue;
-                        Map<?, ?> user = (Map<?, ?>) rawUser;
-                        Object uid = user.get("uid");
-                        if (!(uid instanceof String) || TextUtils.isEmpty((String) uid)) continue;
-
-                        UserEntry entry = new UserEntry();
-                        entry.uid = (String) uid;
-                        entry.email = user.get("email") instanceof String
-                                ? (String) user.get("email") : "";
-                        entry.displayName = user.get("displayName") instanceof String
-                                ? (String) user.get("displayName") : "";
-                        entry.isDeactivated = true;
-                        entry.needsAccessSelection = true;
-                        loadedUsers.add(entry);
-                    }
-
-                    Object nextPageToken = result.get("nextPageToken");
-                    if (nextPageToken instanceof String
-                            && !TextUtils.isEmpty((String) nextPageToken)) {
-                        fetchRegisteredUsersPage((String) nextPageToken, loadedUsers,
-                                reportErrors, callback);
-                        return;
-                    }
-
-                    registeredUsers.clear();
-                    registeredUsers.addAll(loadedUsers);
-                    android.util.Log.i("AdminDashboard",
-                            "Loaded " + registeredUsers.size() + " registered Firebase Auth users");
-                    applySearchAndFilter();
-                    if (callback != null) callback.onComplete();
-                });
+    private void updateProfiles(DataSnapshot snapshot) {
+        registeredUsers.clear();
+        for (DataSnapshot child : snapshot.getChildren()) {
+            UserEntry entry = new UserEntry();
+            entry.uid = child.getKey();
+            DataSnapshot profile = child.child("profile");
+            entry.email = readText(profile.child("email"));
+            entry.displayName = readText(profile.child("displayName"));
+            entry.isDeactivated = true;
+            entry.needsAccessSelection = true;
+            registeredUsers.add(entry);
+        }
+        applySearchAndFilter();
     }
 
     /** Parse a DataSnapshot into a UserEntry. */

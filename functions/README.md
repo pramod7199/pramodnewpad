@@ -13,8 +13,7 @@ firebase deploy --only functions --project pramod-octapad-loop
 ```
 
 Cloud Functions deployment requires a Firebase project with billing enabled
-and access to deploy functions. The `listRegisteredUsers` callable is restricted
-to the configured Admin Panel email; it supplements Realtime Database records
-to find registered accounts whose old deactivation removed their database entry.
+and access to deploy functions. Registered profiles are loaded directly from the
+Realtime Database `users` path in the Admin Panel.
 Android 13 and later also require the admin to allow notifications for the
 Admin Panel app.
