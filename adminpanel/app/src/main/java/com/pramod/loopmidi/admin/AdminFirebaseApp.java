@@ -15,10 +15,9 @@ import com.google.firebase.database.FirebaseDatabase;
  * Services Gradle plugin. That mechanism registers an OAuth client tied to
  * this app's own package name + signing certificate, which would require a
  * second app registration in the Firebase console. Since this admin app
- * only uses Firebase Auth (email/password) and the Realtime Database --
- * never Google Sign-In -- it only needs the project's API key, which is not
- * package/certificate restricted. Building FirebaseOptions by hand avoids
- * that extra console setup entirely.
+ * uses Firebase Auth (email/password), the Realtime Database, and Firebase
+ * Cloud Messaging -- never Google Sign-In. Building FirebaseOptions by hand
+ * keeps the admin app independent of the Google Sign-In OAuth client setup.
  */
 public class AdminFirebaseApp {
 
@@ -39,6 +38,7 @@ public class AdminFirebaseApp {
             FirebaseOptions options = new FirebaseOptions.Builder()
                     .setProjectId(PROJECT_ID)
                     .setApplicationId(APPLICATION_ID)
+                    .setGcmSenderId("1070428492610")
                     .setApiKey(API_KEY)
                     .setDatabaseUrl(DB_URL)
                     .build();

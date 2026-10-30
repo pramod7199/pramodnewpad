@@ -34,36 +34,54 @@ public class AdminDashboardActivity extends AppCompatActivity {
     private FirebaseAuth auth;
     private DatabaseReference pendingRef;
     private DatabaseReference usersRef;
-    private DatabaseReference deactivatedRef;  // NEW: tracks deactivated users
+    private DatabaseReference deactivatedRef;
 
     private LinearLayout pendingContainer;
     private LinearLayout activeContainer;
+    private LinearLayout deactivatedContainer;
     private TextView txtPendingEmpty;
     private TextView txtActiveEmpty;
-    private TextView txtSearchEmpty;   // NEW: "User not found" message
+    private TextView txtDeactivatedEmpty;
+    private TextView txtSearchEmpty;
     private EditText editManualUid;
-    private EditText editSearch;       // NEW: search bar
+    private EditText editSearch;
+    private Button btnRefresh;
+    private Button btnFilterPending;
+    private Button btnFilterActive;
+    private Button btnFilterDeactivated;
+    private ValueEventListener pendingListener;
+    private ValueEventListener activeListener;
+    private ValueEventListener deactivatedListener;
+    private int refreshPendingReads;
+    private int refreshFailureCount;
+    private StringBuilder refreshErrors;
 
     // Checkboxes for the manual-activate section
     private CheckBox cbManualFull;
     private CheckBox cbManualLoops;
     private CheckBox cbManualDrums;
 
-    // ── NEW: Filter state ──────────────────────────────────────────────────────
-    private enum Filter { ALL, ACTIVE, DEACTIVATED }
-    private Filter currentFilter = Filter.ALL;
-    private Button btnFilterAll, btnFilterActive, btnFilterDeactivated;
+    private enum Filter { PENDING, ACTIVE, DEACTIVATED }
+    private Filter currentFilter = Filter.PENDING;
 
-    // ── NEW: Cached user data for search/filter ────────────────────────────────
     private final List<UserEntry> allUsers = new ArrayList<>();
     private final List<UserEntry> deactivatedUsers = new ArrayList<>();
+    private final List<PendingEntry> pendingRequests = new ArrayList<>();
 
-    /** Simple POJO to hold user data for search/filter. */
     private static class UserEntry {
         String uid, email, displayName, deviceToken;
         boolean hasFull, hasLoops, hasDrums;
         boolean isDeactivated;
         long activatedAt;
+
+        boolean hasAnyAppAccess() {
+            return hasFull || hasLoops || hasDrums;
+        }
+    }
+
+    private static class PendingEntry {
+        String uid, email, displayName;
+        long timestamp;
     }
 
     @Override
@@ -72,11 +90,20 @@ public class AdminDashboardActivity extends AppCompatActivity {
         auth = AdminFirebaseApp.auth(this);
         pendingRef = AdminFirebaseApp.database(this).getReference("pendingRequests");
         usersRef   = AdminFirebaseApp.database(this).getReference("authorizedUsers");
-        deactivatedRef = AdminFirebaseApp.database(this).getReference("deactivatedUsers"); // NEW
+        deactivatedRef = AdminFirebaseApp.database(this).getReference("deactivatedUsers");
         buildUi();
+        AdminNotifications.registerForNewRequests(this);
         listenPending();
         listenActive();
-        listenDeactivated(); // NEW
+        listenDeactivated();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (pendingListener != null) pendingRef.removeEventListener(pendingListener);
+        if (activeListener != null) usersRef.removeEventListener(activeListener);
+        if (deactivatedListener != null) deactivatedRef.removeEventListener(deactivatedListener);
+        super.onDestroy();
     }
 
     // ── UI construction (no XML) ──────────────────────────────────────────────
@@ -101,6 +128,10 @@ public class AdminDashboardActivity extends AppCompatActivity {
         title.setTextColor(0xff00afff);
         title.setTextSize(20);
         header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        btnRefresh = new Button(this);
+        btnRefresh.setText("Refresh");
+        btnRefresh.setOnClickListener(v -> refreshLists());
+        header.addView(btnRefresh);
         Button btnLogout = new Button(this);
         btnLogout.setText("Logout");
         btnLogout.setOnClickListener(v -> {
@@ -111,7 +142,6 @@ public class AdminDashboardActivity extends AppCompatActivity {
         header.addView(btnLogout);
         root.addView(header, matchWidth(0));
 
-        // ── NEW: Search bar ───────────────────────────────────────────────────
         root.addView(sectionHeader("Search User"), matchWidth(dp(16)));
         editSearch = new EditText(this);
         editSearch.setHint("UID, email, ya name se search karein...");
@@ -127,7 +157,6 @@ public class AdminDashboardActivity extends AppCompatActivity {
         });
         root.addView(editSearch, matchWidth(dp(4)));
 
-        // "User not found" message (hidden by default)
         txtSearchEmpty = new TextView(this);
         txtSearchEmpty.setText("User not found");
         txtSearchEmpty.setTextColor(0xffff4444);
@@ -135,32 +164,41 @@ public class AdminDashboardActivity extends AppCompatActivity {
         txtSearchEmpty.setVisibility(View.GONE);
         root.addView(txtSearchEmpty, matchWidth(dp(2)));
 
-        // ── NEW: Filter tabs ──────────────────────────────────────────────────
         root.addView(sectionHeader("Users"), matchWidth(dp(16)));
         LinearLayout filterRow = new LinearLayout(this);
         filterRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnFilterAll = makeFilterButton("All", true);
+        btnFilterPending = makeFilterButton("Pending", true);
         btnFilterActive = makeFilterButton("Active", false);
         btnFilterDeactivated = makeFilterButton("Deactivated", false);
-        filterRow.addView(btnFilterAll);
+        btnFilterPending.setOnClickListener(v -> selectFilter(Filter.PENDING));
+        btnFilterActive.setOnClickListener(v -> selectFilter(Filter.ACTIVE));
+        btnFilterDeactivated.setOnClickListener(v -> selectFilter(Filter.DEACTIVATED));
+        filterRow.addView(btnFilterPending);
         filterRow.addView(btnFilterActive);
         filterRow.addView(btnFilterDeactivated);
         root.addView(filterRow, matchWidth(dp(8)));
 
-        // Active/Users container
-        activeContainer = new LinearLayout(this);
-        activeContainer.setOrientation(LinearLayout.VERTICAL);
-        root.addView(activeContainer, matchWidth(dp(4)));
-        txtActiveEmpty = emptyText("Koi user nahi hai.");
-        root.addView(txtActiveEmpty, matchWidth(dp(4)));
-
-        // Pending section
-        root.addView(sectionHeader("Pending Requests (naye users, abhi tak activate nahi)"), matchWidth(dp(20)));
         pendingContainer = new LinearLayout(this);
         pendingContainer.setOrientation(LinearLayout.VERTICAL);
         root.addView(pendingContainer, matchWidth(dp(4)));
         txtPendingEmpty = emptyText("Koi pending request nahi hai.");
         root.addView(txtPendingEmpty, matchWidth(dp(4)));
+
+        activeContainer = new LinearLayout(this);
+        activeContainer.setOrientation(LinearLayout.VERTICAL);
+        activeContainer.setVisibility(View.GONE);
+        root.addView(activeContainer, matchWidth(dp(4)));
+        txtActiveEmpty = emptyText("Koi user nahi hai.");
+        txtActiveEmpty.setVisibility(View.GONE);
+        root.addView(txtActiveEmpty, matchWidth(dp(4)));
+
+        deactivatedContainer = new LinearLayout(this);
+        deactivatedContainer.setOrientation(LinearLayout.VERTICAL);
+        deactivatedContainer.setVisibility(View.GONE);
+        root.addView(deactivatedContainer, matchWidth(dp(4)));
+        txtDeactivatedEmpty = emptyText("Koi deactivated user nahi hai.");
+        txtDeactivatedEmpty.setVisibility(View.GONE);
+        root.addView(txtDeactivatedEmpty, matchWidth(dp(4)));
 
         // Manual activate section
         root.addView(sectionHeader("Manually Activate by UID (fallback)"), matchWidth(dp(24)));
@@ -168,8 +206,6 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
         setContentView(scroll);
     }
-
-    // ── NEW: Filter button helper ─────────────────────────────────────────────
 
     private Button makeFilterButton(String label, boolean selected) {
         Button btn = new Button(this);
@@ -181,20 +217,22 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         p.rightMargin = dp(4);
         btn.setLayoutParams(p);
-        btn.setOnClickListener(v -> {
-            if (label.equals("All")) currentFilter = Filter.ALL;
-            else if (label.equals("Active")) currentFilter = Filter.ACTIVE;
-            else currentFilter = Filter.DEACTIVATED;
-            updateFilterButtons();
-            applySearchAndFilter();
-        });
         return btn;
     }
 
+    private void selectFilter(Filter filter) {
+        currentFilter = filter;
+        updateFilterButtons();
+        applySearchAndFilter();
+    }
+
     private void updateFilterButtons() {
-        btnFilterAll.setBackgroundColor(currentFilter == Filter.ALL ? 0xff00afff : 0xff333333);
+        btnFilterPending.setBackgroundColor(currentFilter == Filter.PENDING ? 0xff00afff : 0xff333333);
         btnFilterActive.setBackgroundColor(currentFilter == Filter.ACTIVE ? 0xff00afff : 0xff333333);
         btnFilterDeactivated.setBackgroundColor(currentFilter == Filter.DEACTIVATED ? 0xff00afff : 0xff333333);
+        btnFilterPending.setText("Pending (" + visiblePendingCount() + ")");
+        btnFilterActive.setText("Active (" + activeUserCount() + ")");
+        btnFilterDeactivated.setText("Deactivated (" + visibleDeactivatedCount() + ")");
     }
 
     private void buildManualSection(LinearLayout root) {
@@ -236,27 +274,31 @@ public class AdminDashboardActivity extends AppCompatActivity {
     // ── Pending list ──────────────────────────────────────────────────────────
 
     private void listenPending() {
-        pendingRef.addValueEventListener(new ValueEventListener() {
+        pendingListener = new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot snapshot) {
-                pendingContainer.removeAllViews();
-                boolean any = false;
-                for (DataSnapshot child : snapshot.getChildren()) {
-                    any = true;
-                    final String uid = child.getKey();
-                    String email       = child.child("email").getValue(String.class);
-                    String displayName = child.child("displayName").getValue(String.class);
-                    Long ts            = child.child("timestamp").getValue(Long.class);
-                    String subLine     = ts != null ? "Request: " + new java.util.Date(ts) : null;
-                    pendingContainer.addView(buildPendingRow(uid, email, displayName, subLine));
-                }
-                txtPendingEmpty.setVisibility(any ? View.GONE : View.VISIBLE);
+                updatePending(snapshot);
             }
             @Override public void onCancelled(DatabaseError e) {
                 Toast.makeText(AdminDashboardActivity.this,
                         "Pending list error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
             }
-        });
+        };
+        pendingRef.addValueEventListener(pendingListener);
+    }
+
+    private void updatePending(DataSnapshot snapshot) {
+        pendingRequests.clear();
+        for (DataSnapshot child : snapshot.getChildren()) {
+            PendingEntry entry = new PendingEntry();
+            entry.uid = child.getKey();
+            entry.email = child.child("email").getValue(String.class);
+            entry.displayName = child.child("displayName").getValue(String.class);
+            Long timestamp = child.child("timestamp").getValue(Long.class);
+            entry.timestamp = timestamp != null ? timestamp : 0;
+            pendingRequests.add(entry);
+        }
+        applySearchAndFilter();
     }
 
     private View buildPendingRow(String uid, String email, String displayName, String subLine) {
@@ -316,39 +358,95 @@ public class AdminDashboardActivity extends AppCompatActivity {
     // ── Active list ───────────────────────────────────────────────────────────
 
     private void listenActive() {
-        usersRef.addValueEventListener(new ValueEventListener() {
+        activeListener = new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot snapshot) {
-                allUsers.clear();
-                for (DataSnapshot child : snapshot.getChildren()) {
-                    UserEntry entry = parseUserEntry(child, false);
-                    if (entry != null) allUsers.add(entry);
-                }
-                applySearchAndFilter();
+                updateActive(snapshot);
             }
             @Override public void onCancelled(DatabaseError e) {
                 Toast.makeText(AdminDashboardActivity.this,
                         "Active list error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
             }
-        });
+        };
+        usersRef.addValueEventListener(activeListener);
     }
 
-    // ── NEW: Deactivated list listener ────────────────────────────────────────
+    private void updateActive(DataSnapshot snapshot) {
+        allUsers.clear();
+        for (DataSnapshot child : snapshot.getChildren()) {
+            UserEntry entry = parseUserEntry(child, false);
+            if (entry != null) allUsers.add(entry);
+        }
+        applySearchAndFilter();
+    }
+
+    // ── Deactivated list listener ─────────────────────────────────────────────
 
     private void listenDeactivated() {
-        deactivatedRef.addValueEventListener(new ValueEventListener() {
+        deactivatedListener = new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot snapshot) {
-                deactivatedUsers.clear();
-                for (DataSnapshot child : snapshot.getChildren()) {
-                    UserEntry entry = parseUserEntry(child, true);
-                    if (entry != null) deactivatedUsers.add(entry);
-                }
-                applySearchAndFilter();
+                updateDeactivated(snapshot);
             }
             @Override public void onCancelled(DatabaseError e) {
                 Toast.makeText(AdminDashboardActivity.this,
                         "Deactivated list error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        };
+        deactivatedRef.addValueEventListener(deactivatedListener);
+    }
+
+    private void updateDeactivated(DataSnapshot snapshot) {
+        deactivatedUsers.clear();
+        for (DataSnapshot child : snapshot.getChildren()) {
+            UserEntry entry = parseUserEntry(child, true);
+            if (entry != null) deactivatedUsers.add(entry);
+        }
+        applySearchAndFilter();
+    }
+
+    private interface SnapshotUpdate {
+        void apply(DataSnapshot snapshot);
+    }
+
+    private void refreshLists() {
+        if (refreshPendingReads > 0) return;
+        refreshPendingReads = 3;
+        refreshFailureCount = 0;
+        refreshErrors = new StringBuilder();
+        btnRefresh.setEnabled(false);
+        btnRefresh.setText("Refreshing...");
+
+        refreshReference(pendingRef, "Pending", this::updatePending);
+        refreshReference(usersRef, "Active", this::updateActive);
+        refreshReference(deactivatedRef, "Deactivated", this::updateDeactivated);
+    }
+
+    private void refreshReference(DatabaseReference reference, String listName,
+                                  SnapshotUpdate update) {
+        reference.get().addOnCompleteListener(this, task -> {
+            if (isFinishing() || isDestroyed()) return;
+
+            if (task.isSuccessful() && task.getResult() != null) {
+                update.apply(task.getResult());
+            } else {
+                refreshFailureCount++;
+                if (refreshErrors.length() > 0) refreshErrors.append(", ");
+                refreshErrors.append(listName);
+                Exception error = task.getException();
+                if (error != null) {
+                    android.util.Log.e("AdminDashboard", listName + " refresh failed", error);
+                }
+            }
+
+            refreshPendingReads--;
+            if (refreshPendingReads == 0) {
+                btnRefresh.setEnabled(true);
+                btnRefresh.setText("Refresh");
+                String message = refreshFailureCount == 0
+                        ? "Lists refreshed."
+                        : "Could not refresh: " + refreshErrors;
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -375,61 +473,132 @@ public class AdminDashboardActivity extends AppCompatActivity {
         return entry;
     }
 
-    // ── NEW: Search + Filter combined ─────────────────────────────────────────
-
     private void applySearchAndFilter() {
         String query = "";
         if (editSearch != null && editSearch.getText() != null) {
             query = editSearch.getText().toString().trim().toLowerCase();
         }
-        final String q = query;
+        String q = query.toLowerCase();
 
-        activeContainer.removeAllViews();
+        pendingContainer.setVisibility(currentFilter == Filter.PENDING ? View.VISIBLE : View.GONE);
+        txtPendingEmpty.setVisibility(currentFilter == Filter.PENDING ? View.VISIBLE : View.GONE);
+        activeContainer.setVisibility(currentFilter == Filter.ACTIVE ? View.VISIBLE : View.GONE);
+        txtActiveEmpty.setVisibility(currentFilter == Filter.ACTIVE ? View.VISIBLE : View.GONE);
+        deactivatedContainer.setVisibility(
+                currentFilter == Filter.DEACTIVATED ? View.VISIBLE : View.GONE);
+        txtDeactivatedEmpty.setVisibility(
+                currentFilter == Filter.DEACTIVATED ? View.VISIBLE : View.GONE);
+
         boolean any = false;
+        pendingContainer.removeAllViews();
+        activeContainer.removeAllViews();
+        deactivatedContainer.removeAllViews();
 
-        // Merge active + deactivated lists
-        List<UserEntry> combined = new ArrayList<>();
-        combined.addAll(allUsers);
-        combined.addAll(deactivatedUsers);
-
-        for (UserEntry entry : combined) {
-            // Apply filter
-            if (currentFilter == Filter.ACTIVE && entry.isDeactivated) continue;
-            if (currentFilter == Filter.DEACTIVATED && !entry.isDeactivated) continue;
-
-            // Apply search
-            if (!q.isEmpty()) {
-                boolean match = (entry.uid != null && entry.uid.toLowerCase().contains(q))
-                        || (entry.email != null && entry.email.toLowerCase().contains(q))
-                        || (entry.displayName != null && entry.displayName.toLowerCase().contains(q));
-                if (!match) continue;
+        if (currentFilter == Filter.PENDING) {
+            for (PendingEntry entry : pendingRequests) {
+                if (hasAuthorizedRecord(entry.uid) || !matchesSearch(
+                        entry.uid, entry.email, entry.displayName, q)) continue;
+                String subLine = entry.timestamp > 0
+                        ? "Request: " + new java.util.Date(entry.timestamp) : null;
+                pendingContainer.addView(buildPendingRow(
+                        entry.uid, entry.email, entry.displayName, subLine));
+                any = true;
             }
-
-            any = true;
-            activeContainer.addView(buildUserRow(entry));
+            txtPendingEmpty.setVisibility(any ? View.GONE : View.VISIBLE);
+        } else if (currentFilter == Filter.ACTIVE) {
+            for (UserEntry entry : allUsers) {
+                if (!entry.hasAnyAppAccess() || !matchesSearch(
+                        entry.uid, entry.email, entry.displayName, q)) continue;
+                activeContainer.addView(buildUserRow(entry));
+                any = true;
+            }
+            txtActiveEmpty.setVisibility(any ? View.GONE : View.VISIBLE);
+        } else {
+            for (UserEntry entry : allUsers) {
+                if (entry.hasAnyAppAccess() || hasPendingRequest(entry.uid)
+                        || !matchesSearch(entry.uid, entry.email, entry.displayName, q)) continue;
+                deactivatedContainer.addView(buildUserRow(entry));
+                any = true;
+            }
+            for (UserEntry entry : deactivatedUsers) {
+                if (hasAuthorizedRecord(entry.uid) || hasPendingRequest(entry.uid)
+                        || !matchesSearch(entry.uid, entry.email, entry.displayName, q)) continue;
+                deactivatedContainer.addView(buildUserRow(entry));
+                any = true;
+            }
+            txtDeactivatedEmpty.setVisibility(any ? View.GONE : View.VISIBLE);
         }
 
-        txtActiveEmpty.setVisibility(any ? View.GONE : View.VISIBLE);
-        // Show "User not found" only when search is active and no results
+        updateFilterButtons();
         if (txtSearchEmpty != null) {
             txtSearchEmpty.setVisibility(!q.isEmpty() && !any ? View.VISIBLE : View.GONE);
         }
     }
 
-    // ── NEW: Build row for any user (active or deactivated) ───────────────────
+    private boolean matchesSearch(String uid, String email, String displayName, String query) {
+        return query.isEmpty()
+                || (uid != null && uid.toLowerCase().contains(query))
+                || (email != null && email.toLowerCase().contains(query))
+                || (displayName != null && displayName.toLowerCase().contains(query));
+    }
+
+    private boolean hasAuthorizedRecord(String uid) {
+        for (UserEntry entry : allUsers) {
+            if (uid != null && uid.equals(entry.uid)) return true;
+        }
+        return false;
+    }
+
+    private boolean hasPendingRequest(String uid) {
+        for (PendingEntry entry : pendingRequests) {
+            if (uid != null && uid.equals(entry.uid)) return true;
+        }
+        return false;
+    }
+
+    private int activeUserCount() {
+        int count = 0;
+        for (UserEntry entry : allUsers) {
+            if (entry.hasAnyAppAccess()) count++;
+        }
+        return count;
+    }
+
+    private int visiblePendingCount() {
+        int count = 0;
+        for (PendingEntry entry : pendingRequests) {
+            if (!hasAuthorizedRecord(entry.uid)) count++;
+        }
+        return count;
+    }
+
+    private int visibleDeactivatedCount() {
+        int count = 0;
+        for (UserEntry entry : allUsers) {
+            if (!entry.hasAnyAppAccess() && !hasPendingRequest(entry.uid)) count++;
+        }
+        for (UserEntry entry : deactivatedUsers) {
+            if (!hasAuthorizedRecord(entry.uid) && !hasPendingRequest(entry.uid)) count++;
+        }
+        return count;
+    }
 
     private View buildUserRow(UserEntry entry) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setBackgroundColor(entry.isDeactivated ? 0xff2a1515 : 0xff1c1c1c);
+        boolean noAppAccess = !entry.isDeactivated && !entry.hasAnyAppAccess();
+        row.setBackgroundColor(entry.isDeactivated || noAppAccess
+                ? 0xff2a1515 : 0xff1c1c1c);
         int pad = dp(10);
         row.setPadding(pad, pad, pad, pad);
         row.setLayoutParams(matchWidth(dp(6)));
 
         // Status badge
         TextView txtStatus = new TextView(this);
-        txtStatus.setText(entry.isDeactivated ? "❌ DEACTIVATED" : "✅ ACTIVE");
-        txtStatus.setTextColor(entry.isDeactivated ? 0xffff4444 : 0xff44ff44);
+        txtStatus.setText(entry.isDeactivated ? "❌ DEACTIVATED"
+                : noAppAccess ? "⛔ NO APP ACCESS" : "✅ ACTIVE");
+        txtStatus.setTextColor(entry.isDeactivated || noAppAccess
+                ? 0xffff4444 : 0xff44ff44);
         txtStatus.setTextSize(11);
         txtStatus.setPadding(0, 0, 0, dp(2));
         row.addView(txtStatus);
@@ -452,6 +621,14 @@ public class AdminDashboardActivity extends AppCompatActivity {
             btnReactivate.setText("Reactivate");
             btnReactivate.setOnClickListener(v -> reactivateUser(entry));
             btnRow.addView(btnReactivate, new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        } else if (noAppAccess) {
+            Button btnGrantAccess = new Button(this);
+            btnGrantAccess.setText("Grant Access");
+            btnGrantAccess.setOnClickListener(v ->
+                    showEditAppsDialog(entry.uid, entry.email, entry.displayName,
+                            entry.hasFull, entry.hasLoops, entry.hasDrums));
+            btnRow.addView(btnGrantAccess, new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         } else {
             // Active user → Deactivate + Edit Apps + Unlock buttons
