@@ -305,6 +305,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
             entry.timestamp = readTimestamp(child.child("timestamp"));
             pendingRequests.add(entry);
         }
+        pendingRequests.sort((left, right) -> Long.compare(right.timestamp, left.timestamp));
         applySearchAndFilter();
     }
 
@@ -819,49 +820,79 @@ public class AdminDashboardActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("Deactivate karein?")
                 .setMessage("Yeh user turant logout ho jayega. Aap ise baad me Reactivate kar sakte hain.")
-                .setPositiveButton("Deactivate", (dialog, which) -> {
-                    // Copy to deactivatedUsers
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("email", entry.email != null ? entry.email : "");
-                    data.put("displayName", entry.displayName != null ? entry.displayName : "");
-                    data.put("deactivatedAt", System.currentTimeMillis());
-
-                    Map<String, Object> appsMap = new HashMap<>();
-                    appsMap.put("full", entry.hasFull);
-                    appsMap.put("loops", entry.hasLoops);
-                    appsMap.put("drums", entry.hasDrums);
-                    data.put("allowedApps", appsMap);
-
-                    if (entry.deviceToken != null) {
-                        data.put("deviceToken", entry.deviceToken);
-                    }
-
-                    deactivatedRef.child(entry.uid).setValue(data);
-                    usersRef.child(entry.uid).removeValue();
-                    Toast.makeText(this, "Deactivated: " + (entry.email != null ? entry.email : entry.uid),
-                            Toast.LENGTH_SHORT).show();
-                })
+                .setPositiveButton("Deactivate", (dialog, which) ->
+                        moveUserRecord(entry, usersRef, "authorizedUsers",
+                                deactivatedRef, "deactivatedUsers", false))
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
     /** Reactivate: move from deactivatedUsers back to authorizedUsers. */
     private void reactivateUser(UserEntry entry) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("email", entry.email != null ? entry.email : "");
-        data.put("displayName", entry.displayName != null ? entry.displayName : "");
-        data.put("activatedAt", System.currentTimeMillis());
+        moveUserRecord(entry, deactivatedRef, "deactivatedUsers",
+                usersRef, "authorizedUsers", true);
+    }
 
-        Map<String, Object> appsMap = new HashMap<>();
-        appsMap.put("full", entry.hasFull);
-        appsMap.put("loops", entry.hasLoops);
-        appsMap.put("drums", entry.hasDrums);
-        data.put("allowedApps", appsMap);
+    private void moveUserRecord(UserEntry entry, DatabaseReference source,
+                                String sourcePath, DatabaseReference destination,
+                                String destinationPath, boolean activating) {
+        source.child(entry.uid).get().addOnCompleteListener(this, task -> {
+            if (!task.isSuccessful() || task.getResult() == null
+                    || !task.getResult().exists()) {
+                Exception error = task.getException();
+                if (error != null) {
+                    android.util.Log.e("AdminDashboard",
+                            "Could not read " + sourcePath + " record for " + entry.uid, error);
+                }
+                Toast.makeText(this, "User data could not be loaded. Nothing was changed.",
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
 
-        usersRef.child(entry.uid).setValue(data);
-        deactivatedRef.child(entry.uid).removeValue();
-        Toast.makeText(this, "Reactivated: " + (entry.email != null ? entry.email : entry.uid),
-                Toast.LENGTH_SHORT).show();
+            Object rawRecord = task.getResult().getValue();
+            if (!(rawRecord instanceof Map)) {
+                android.util.Log.e("AdminDashboard",
+                        "Invalid " + sourcePath + " record for " + entry.uid);
+                Toast.makeText(this, "User data is invalid. Nothing was changed.",
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            Map<String, Object> record = new HashMap<>();
+            for (Map.Entry<?, ?> field : ((Map<?, ?>) rawRecord).entrySet()) {
+                if (field.getKey() instanceof String) {
+                    record.put((String) field.getKey(), field.getValue());
+                }
+            }
+
+            if (activating) {
+                record.put("activatedAt", System.currentTimeMillis());
+                record.remove("deactivatedAt");
+            } else {
+                record.put("deactivatedAt", System.currentTimeMillis());
+            }
+
+            Map<String, Object> updates = new HashMap<>();
+            updates.put(sourcePath + "/" + entry.uid, null);
+            updates.put(destinationPath + "/" + entry.uid, record);
+            AdminFirebaseApp.database(this).getReference().updateChildren(updates)
+                    .addOnCompleteListener(this, updateTask -> {
+                        if (!updateTask.isSuccessful()) {
+                            Exception error = updateTask.getException();
+                            android.util.Log.e("AdminDashboard",
+                                    "Could not move " + entry.uid + " to " + destinationPath,
+                                    error);
+                            Toast.makeText(this,
+                                    "User status could not be updated. Please refresh and try again.",
+                                    Toast.LENGTH_LONG).show();
+                            return;
+                        }
+
+                        String status = activating ? "Reactivated: " : "Deactivated: ";
+                        String identity = !TextUtils.isEmpty(entry.email) ? entry.email : entry.uid;
+                        Toast.makeText(this, status + identity, Toast.LENGTH_SHORT).show();
+                    });
+        });
     }
 
     private void manualActivate() {
