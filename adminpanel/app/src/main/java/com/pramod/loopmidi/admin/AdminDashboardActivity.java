@@ -872,18 +872,42 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 record.put("deactivatedAt", System.currentTimeMillis());
             }
 
-            Map<String, Object> updates = new HashMap<>();
-            updates.put(sourcePath + "/" + entry.uid, null);
-            updates.put(destinationPath + "/" + entry.uid, record);
-            AdminFirebaseApp.database(this).getReference().updateChildren(updates)
-                    .addOnCompleteListener(this, updateTask -> {
-                        if (!updateTask.isSuccessful()) {
-                            Exception error = updateTask.getException();
-                            android.util.Log.e("AdminDashboard",
-                                    "Could not move " + entry.uid + " to " + destinationPath,
-                                    error);
+            DatabaseReference destinationUser = destination.child(entry.uid);
+            destinationUser.get().addOnCompleteListener(this, destinationRead -> {
+                if (!destinationRead.isSuccessful() || destinationRead.getResult() == null) {
+                    Exception error = destinationRead.getException();
+                    if (error != null) {
+                        android.util.Log.e("AdminDashboard",
+                                "Could not read " + destinationPath + " record for " + entry.uid,
+                                error);
+                    }
+                    Toast.makeText(this, "Could not verify the destination record. Nothing was changed.",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+
+                boolean destinationExisted = destinationRead.getResult().exists();
+                Object previousDestination = destinationRead.getResult().getValue();
+                destinationUser.setValue(record).addOnCompleteListener(this, saveTask -> {
+                    if (!saveTask.isSuccessful()) {
+                        logMoveFailure("Could not save " + destinationPath, entry.uid,
+                                saveTask.getException());
+                        Toast.makeText(this,
+                                "Could not save the user in " + destinationPath
+                                        + ". The current record was kept.",
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+
+                    source.child(entry.uid).removeValue().addOnCompleteListener(this, removeTask -> {
+                        if (!removeTask.isSuccessful()) {
+                            logMoveFailure("Could not remove " + sourcePath, entry.uid,
+                                    removeTask.getException());
+                            restoreDestination(destinationUser, destinationExisted,
+                                    previousDestination, entry.uid, destinationPath);
                             Toast.makeText(this,
-                                    "User status could not be updated. Please refresh and try again.",
+                                    "Could not remove the old user record. Please check Firebase "
+                                            + "permissions and refresh; the user was not logged out.",
                                     Toast.LENGTH_LONG).show();
                             return;
                         }
@@ -892,7 +916,29 @@ public class AdminDashboardActivity extends AppCompatActivity {
                         String identity = !TextUtils.isEmpty(entry.email) ? entry.email : entry.uid;
                         Toast.makeText(this, status + identity, Toast.LENGTH_SHORT).show();
                     });
+                });
+            });
         });
+    }
+
+    private void restoreDestination(DatabaseReference destinationUser, boolean existed,
+                                    Object previousValue, String uid, String destinationPath) {
+        com.google.android.gms.tasks.Task<Void> restoreTask = existed
+                ? destinationUser.setValue(previousValue)
+                : destinationUser.removeValue();
+        restoreTask.addOnCompleteListener(this, task -> {
+            if (!task.isSuccessful()) {
+                logMoveFailure("Could not roll back " + destinationPath, uid,
+                        task.getException());
+                Toast.makeText(this,
+                        "Rollback failed. User data is preserved in both lists; refresh and review it.",
+                        Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void logMoveFailure(String action, String uid, Exception error) {
+        android.util.Log.e("AdminDashboard", action + " record for " + uid, error);
     }
 
     private void manualActivate() {
