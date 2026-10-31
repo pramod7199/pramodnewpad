@@ -14,6 +14,8 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
+import android.media.AudioFormat;
+import android.media.AudioTrack;
 import android.media.midi.MidiDevice;
 import android.media.midi.MidiDeviceInfo;
 import android.media.midi.MidiManager;
@@ -126,6 +128,9 @@ public class MainActivity extends Activity {
     // Tracks the pad currently previewing in the Pad Edit dialog so the next
     // preview stops it first (no overlapping previews, low latency). -1 = none.
     private int                       lastPreviewPadIdx      = -1;
+    private final Object              trimPreviewLock       = new Object();
+    private AudioTrack                trimPreviewTrack;
+    private Thread                    trimPreviewThread;
 
     // ── MIDI Kit Lock — SPD-20 Pro kit filter ─────────────────────────────────
     // midiKitLockNumber: SPD-20 Pro kit no. jis pe app ka sound bajega (-1 = off)
@@ -3048,13 +3053,16 @@ public class MainActivity extends Activity {
                         Toast.LENGTH_LONG).show());
                 return;
             }
+            float[] waveform = pcm == null || pcm.length < 2
+                    ? null : createWaveformSamples(pcm);
             runOnUiThread(() -> {
                 if (pcm == null || pcm.length < 2) {
                     Toast.makeText(this, "Could not decode selected audio", Toast.LENGTH_LONG).show();
                     return;
                 }
                 showAudioTrimDialog(uri, 0, pcm, padIndex, bankB, kitNo, slot,
-                        0, 1000, true, "Trim before loading PAD " + (padIndex + 1));
+                        0, 1000, true, "Trim before loading PAD " + (padIndex + 1),
+                        waveform);
             });
         });
     }
@@ -3080,6 +3088,7 @@ public class MainActivity extends Activity {
                 pcm = null;
             }
             short[] decodedPcm = pcm;
+            float[] waveform = decodedPcm == null ? null : createWaveformSamples(decodedPcm);
             runOnUiThread(() -> {
                 if (decodedPcm == null || decodedPcm.length < 2) {
                     Toast.makeText(this, "Could not read the loaded pad audio",
@@ -3089,119 +3098,322 @@ public class MainActivity extends Activity {
                 showAudioTrimDialog(uri, rawId, decodedPcm, padIndex, bankB, kitNo, slot,
                         prefs.getInt(trimStartKey(bankB, kitNo, padIndex), 0),
                         prefs.getInt(trimEndKey(bankB, kitNo, padIndex), 1000),
-                        false, "Trim loaded PAD " + (padIndex + 1));
+                        false, "Trim loaded PAD " + (padIndex + 1), waveform);
             });
         });
     }
 
     private void showAudioTrimDialog(Uri sourceUri, int rawId, short[] sourcePcm, int padIndex,
                                      boolean bankB, int kitNo, int slot, int initialStart,
-                                     int initialEnd, boolean newSound, String title) {
+                                     int initialEnd, boolean newSound, String title,
+                                     float[] waveformSamples) {
+        AudioEngine engine = audioEngine;
+        if (engine == null || sourcePcm.length < 2) {
+            Toast.makeText(this, "Audio is not available for trimming",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        final double durationSeconds = (sourcePcm.length / 2.0) / engine.getSampleRate();
+        if (durationSeconds <= 0) {
+            Toast.makeText(this, "Audio duration is invalid", Toast.LENGTH_LONG).show();
+            return;
+        }
+        int start = Math.max(0, Math.min(999, initialStart));
+        int end = Math.max(start + 1, Math.min(1000, initialEnd));
+        final double[] range = {durationSeconds * start / 1000.0,
+                durationSeconds * end / 1000.0};
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         android.widget.LinearLayout content = new android.widget.LinearLayout(this);
         content.setOrientation(android.widget.LinearLayout.VERTICAL);
         int padding = Math.round(18 * getResources().getDisplayMetrics().density);
         content.setPadding(padding, padding, padding, padding);
+        scroll.addView(content);
 
-        android.widget.TextView startLabel = new android.widget.TextView(this);
-        startLabel.setText("Start: " + initialStart / 10.0f + "%");
-        content.addView(startLabel);
-        android.widget.SeekBar startSeek = new android.widget.SeekBar(this);
-        startSeek.setMax(999);
-        int startValue = Math.max(0, Math.min(998, initialStart));
-        int endValue = Math.max(startValue + 1, Math.min(1000, initialEnd));
-        startSeek.setProgress(startValue);
-        content.addView(startSeek);
+        TextView info = new TextView(this);
+        info.setText(String.format(java.util.Locale.US, "Duration: %.2f sec  |  PAD %d",
+                durationSeconds, padIndex + 1));
+        content.addView(info);
 
-        android.widget.TextView endLabel = new android.widget.TextView(this);
-        endLabel.setText("End: " + initialEnd / 10.0f + "%");
-        content.addView(endLabel);
-        android.widget.SeekBar endSeek = new android.widget.SeekBar(this);
-        endSeek.setMax(1000);
-        endSeek.setProgress(endValue);
-        content.addView(endSeek);
+        WaveformTrimView waveform = new WaveformTrimView(this);
+        waveform.setSamples(waveformSamples);
+        waveform.setMarkers(start / 1000f, end / 1000f);
+        int waveformHeight = Math.round(180 * getResources().getDisplayMetrics().density);
+        android.widget.LinearLayout.LayoutParams waveformParams =
+                new android.widget.LinearLayout.LayoutParams(-1, waveformHeight);
+        waveformParams.bottomMargin = dp(12);
+        content.addView(waveform, waveformParams);
 
-        startSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (progress >= endSeek.getProgress()) {
-                    startSeek.setProgress(Math.max(0, endSeek.getProgress() - 1));
-                    progress = startSeek.getProgress();
-                }
-                startLabel.setText("Start: " + progress / 10.0f + "%");
-            }
+        android.widget.LinearLayout timeRow = new android.widget.LinearLayout(this);
+        timeRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView startLabel = new TextView(this);
+        startLabel.setText("Start:");
+        EditText startInput = createTrimTimeInput(range[0]);
+        TextView endLabel = new TextView(this);
+        endLabel.setText("End:");
+        EditText endInput = createTrimTimeInput(range[1]);
+        timeRow.addView(startLabel);
+        timeRow.addView(startInput, new android.widget.LinearLayout.LayoutParams(0, -2, 1f));
+        timeRow.addView(endLabel);
+        timeRow.addView(endInput, new android.widget.LinearLayout.LayoutParams(0, -2, 1f));
+        content.addView(timeRow);
 
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
+        TextView rangeLabel = new TextView(this);
+        rangeLabel.setTextColor(0xFFFFCC44);
+        content.addView(rangeLabel);
+        TextView status = new TextView(this);
+        status.setText("Drag the waveform markers or enter start/end times.");
+        content.addView(status);
 
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
+        final boolean[] changingFromWaveform = {false};
+        Runnable updateRangeText = () -> rangeLabel.setText(String.format(
+                java.util.Locale.US, "Selected: %.2fs → %.2fs  (%.2fs)",
+                range[0], range[1], range[1] - range[0]));
+        updateRangeText.run();
+        waveform.setOnMarkersChanged((startFraction, endFraction) -> {
+            changingFromWaveform[0] = true;
+            range[0] = durationSeconds * startFraction;
+            range[1] = durationSeconds * endFraction;
+            startInput.setText(String.format(java.util.Locale.US, "%.2f", range[0]));
+            endInput.setText(String.format(java.util.Locale.US, "%.2f", range[1]));
+            updateRangeText.run();
+            changingFromWaveform[0] = false;
         });
-        endSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (progress <= startSeek.getProgress()) {
-                    endSeek.setProgress(Math.min(1000, startSeek.getProgress() + 1));
-                    progress = endSeek.getProgress();
+        android.text.TextWatcher timeWatcher = new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(android.text.Editable editable) {
+                if (changingFromWaveform[0]) return;
+                try {
+                    double startSeconds = Double.parseDouble(startInput.getText().toString());
+                    double endSeconds = Double.parseDouble(endInput.getText().toString());
+                    if (startSeconds < 0 || endSeconds > durationSeconds
+                            || endSeconds <= startSeconds) return;
+                    range[0] = startSeconds;
+                    range[1] = endSeconds;
+                    waveform.setMarkers((float) (startSeconds / durationSeconds),
+                            (float) (endSeconds / durationSeconds));
+                    updateRangeText.run();
+                } catch (NumberFormatException ignored) {
                 }
-                endLabel.setText("End: " + progress / 10.0f + "%");
             }
+        };
+        startInput.addTextChangedListener(timeWatcher);
+        endInput.addTextChangedListener(timeWatcher);
 
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
+        android.widget.LinearLayout previewRow = new android.widget.LinearLayout(this);
+        Button previewButton = new Button(this);
+        previewButton.setText("▶ PLAY SELECTED");
+        Button stopButton = new Button(this);
+        stopButton.setText("⏹ STOP");
+        previewRow.addView(previewButton, new android.widget.LinearLayout.LayoutParams(0, -2, 1f));
+        previewRow.addView(stopButton, new android.widget.LinearLayout.LayoutParams(0, -2, 1f));
+        content.addView(previewRow);
 
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
-        });
-
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(title)
-                .setMessage("Choose the audio section to keep.")
-                .setView(content)
-                .setPositiveButton(newSound ? "Trim & Load" : "Apply Trim",
-                        (dialog, which) -> {
-                            int start = startSeek.getProgress();
-                            int end = endSeek.getProgress();
-                            if (end <= start) {
-                                Toast.makeText(this, "End must be after start",
-                                        Toast.LENGTH_LONG).show();
-                                return;
-                            }
-                            short[] trimmed = trimPcm(sourcePcm, start, end);
-                            AudioEngine engine = audioEngine;
-                            if (engine == null || !engine.uploadPcm(slot, trimmed)) {
-                                Toast.makeText(this, "Could not apply audio trim",
-                                        Toast.LENGTH_LONG).show();
-                                return;
-                            }
-                            AudioEngine.SampleData sample = new AudioEngine.SampleData();
-                            sample.uri = sourceUri;
-                            sample.soundId = slot;
-                            sample.loaded = true;
-                            if (bankB) {
-                                selectedWavUrisB[padIndex] = sourceUri;
-                                selectedRawResIdsB[padIndex] = rawId;
-                                samplesB[padIndex] = sample;
-                                loadedSoundKitB = kitNo;
-                            } else {
-                                selectedWavUris[padIndex] = sourceUri;
-                                selectedRawResIds[padIndex] = rawId;
-                                samples[padIndex] = sample;
-                                loadedSoundKitA = kitNo;
-                            }
-                            prefs.edit()
-                                    .putInt(trimStartKey(bankB, kitNo, padIndex), start)
-                                    .putInt(trimEndKey(bankB, kitNo, padIndex), end)
-                                    .commit();
-                            saveKitToMemory(kitIndex);
-                            Toast.makeText(this, "Audio trim saved for PAD "
-                                    + (padIndex + 1), Toast.LENGTH_SHORT).show();
-                        })
+                .setView(scroll)
+                .setPositiveButton(newSound ? "Trim & Load" : "Apply Trim", null)
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+        previewButton.setOnClickListener(v -> {
+            int startPermille = (int) Math.round(range[0] / durationSeconds * 1000);
+            int endPermille = (int) Math.round(range[1] / durationSeconds * 1000);
+            playAudioTrimPreview(sourcePcm, startPermille, endPermille, status);
+        });
+        stopButton.setOnClickListener(v -> stopAudioTrimPreview());
+        dialog.setOnDismissListener(ignored -> stopAudioTrimPreview());
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> {
+                    final int startPermille;
+                    final int endPermille;
+                    try {
+                        double startSeconds = Double.parseDouble(
+                                startInput.getText().toString().trim());
+                        double endSeconds = Double.parseDouble(
+                                endInput.getText().toString().trim());
+                        if (startSeconds < 0 || endSeconds > durationSeconds
+                                || endSeconds <= startSeconds) {
+                            throw new NumberFormatException("Invalid range");
+                        }
+                        startPermille = Math.max(0, Math.min(999,
+                                (int) Math.round(startSeconds / durationSeconds * 1000)));
+                        endPermille = Math.max(startPermille + 1, Math.min(1000,
+                                (int) Math.round(endSeconds / durationSeconds * 1000)));
+                    } catch (NumberFormatException error) {
+                        status.setText("Enter a valid range with End after Start.");
+                        status.setTextColor(0xFFFF4444);
+                        return;
+                    }
+                    short[] trimmed = trimPcm(sourcePcm, startPermille, endPermille);
+                    AudioEngine activeEngine = audioEngine;
+                    if (activeEngine == null || !activeEngine.uploadPcm(slot, trimmed)) {
+                        status.setText("Could not apply audio trim.");
+                        status.setTextColor(0xFFFF4444);
+                        return;
+                    }
+                    AudioEngine.SampleData sample = new AudioEngine.SampleData();
+                    sample.uri = sourceUri;
+                    sample.soundId = slot;
+                    sample.loaded = true;
+                    if (bankB) {
+                        selectedWavUrisB[padIndex] = sourceUri;
+                        selectedRawResIdsB[padIndex] = rawId;
+                        samplesB[padIndex] = sample;
+                        loadedSoundKitB = kitNo;
+                    } else {
+                        selectedWavUris[padIndex] = sourceUri;
+                        selectedRawResIds[padIndex] = rawId;
+                        samples[padIndex] = sample;
+                        loadedSoundKitA = kitNo;
+                    }
+                    prefs.edit()
+                            .putInt(trimStartKey(bankB, kitNo, padIndex), startPermille)
+                            .putInt(trimEndKey(bankB, kitNo, padIndex), endPermille)
+                            .commit();
+                    saveKitToMemory(kitIndex);
+                    Toast.makeText(this, "Audio trim saved for PAD "
+                            + (padIndex + 1), Toast.LENGTH_SHORT).show();
+                    dialog.dismiss();
+                }));
+        dialog.show();
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.95f),
+                    (int) (getResources().getDisplayMetrics().heightPixels * 0.88f));
+        }
+    }
+
+    private EditText createTrimTimeInput(double seconds) {
+        EditText input = new EditText(this);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        input.setSingleLine(true);
+        input.setText(String.format(java.util.Locale.US, "%.2f", seconds));
+        return input;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private float[] createWaveformSamples(short[] pcm) {
+        int frameCount = pcm.length / 2;
+        int columns = Math.min(700, frameCount);
+        float[] waveform = new float[columns];
+        for (int column = 0; column < columns; column++) {
+            int startFrame = (int) ((long) column * frameCount / columns);
+            int endFrame = (int) ((long) (column + 1) * frameCount / columns);
+            float peak = 0f;
+            for (int frame = startFrame; frame < endFrame; frame++) {
+                int sampleIndex = frame * 2;
+                peak = Math.max(peak, Math.abs(pcm[sampleIndex] / 32768f));
+                peak = Math.max(peak, Math.abs(pcm[sampleIndex + 1] / 32768f));
+            }
+            waveform[column] = peak;
+        }
+        return waveform;
+    }
+
+    private void playAudioTrimPreview(short[] pcm, int startPermille, int endPermille,
+                                      TextView status) {
+        stopAudioTrimPreview();
+        AudioEngine engine = audioEngine;
+        if (engine == null) {
+            status.setText("Audio engine is not available for preview.");
+            return;
+        }
+        int frames = pcm.length / 2;
+        int startFrame = Math.max(0, Math.min(frames - 1,
+                (int) ((long) frames * startPermille / 1000)));
+        int endFrame = Math.max(startFrame + 1, Math.min(frames,
+                (int) ((long) frames * endPermille / 1000)));
+        int minBuffer = AudioTrack.getMinBufferSize(engine.getSampleRate(),
+                AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
+        if (minBuffer <= 0) {
+            status.setText("Could not initialize audio preview.");
+            return;
+        }
+        AudioTrack track;
+        try {
+            track = new AudioTrack(android.media.AudioManager.STREAM_MUSIC,
+                    engine.getSampleRate(), AudioFormat.CHANNEL_OUT_STEREO,
+                    AudioFormat.ENCODING_PCM_16BIT, Math.max(minBuffer, 4096),
+                    AudioTrack.MODE_STREAM);
+        } catch (IllegalArgumentException | IllegalStateException error) {
+            Log.e(TAG, "Could not initialize audio trim preview", error);
+            status.setText("Could not initialize audio preview.");
+            return;
+        }
+        if (track.getState() != AudioTrack.STATE_INITIALIZED) {
+            track.release();
+            status.setText("Could not initialize audio preview.");
+            return;
+        }
+        Thread previewThread = new Thread(() -> {
+            try {
+                track.play();
+                int offset = startFrame * 2;
+                int endOffset = endFrame * 2;
+                while (offset < endOffset && !Thread.currentThread().isInterrupted()) {
+                    int written = track.write(pcm, offset,
+                            Math.min(4096, endOffset - offset), AudioTrack.WRITE_BLOCKING);
+                    if (written <= 0) throw new IllegalStateException(
+                            "Audio preview write failed: " + written);
+                    offset += written;
+                }
+            } catch (RuntimeException error) {
+                if (!Thread.currentThread().isInterrupted()) {
+                    Log.e(TAG, "Could not play audio trim preview", error);
+                }
+            } finally {
+                finishAudioTrimPreview(track);
+            }
+        }, "pad-trim-preview");
+        synchronized (trimPreviewLock) {
+            trimPreviewTrack = track;
+            trimPreviewThread = previewThread;
+        }
+        status.setText("Playing selected audio...");
+        previewThread.start();
+    }
+
+    private void stopAudioTrimPreview() {
+        AudioTrack track;
+        Thread thread;
+        synchronized (trimPreviewLock) {
+            track = trimPreviewTrack;
+            thread = trimPreviewThread;
+            trimPreviewTrack = null;
+            trimPreviewThread = null;
+        }
+        if (thread != null) thread.interrupt();
+        if (track != null) {
+            try {
+                if (track.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) track.pause();
+                track.flush();
+                track.stop();
+            } catch (IllegalStateException ignored) {
+                // The preview may have completed while the stop action was running.
+            } finally {
+                track.release();
+            }
+        }
+    }
+
+    private void finishAudioTrimPreview(AudioTrack track) {
+        synchronized (trimPreviewLock) {
+            if (trimPreviewTrack != track) return;
+            trimPreviewTrack = null;
+            trimPreviewThread = null;
+        }
+        try {
+            if (track.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) track.stop();
+        } catch (IllegalStateException ignored) {
+            // The track can already be stopped by the user.
+        } finally {
+            track.release();
+        }
     }
 
     @Override // android.app.Activity

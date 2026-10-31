@@ -6616,7 +6616,7 @@ public class LoopsActivity extends Activity implements DialogInterface.OnClickLi
         root.addView(tvInfo);
 
         // ── Waveform view ─────────────────────────────────────────────────────
-        final WaveformView waveformView = new WaveformView(this);
+        final WaveformTrimView waveformView = new WaveformTrimView(this);
         int wvHeightPx = (int)(getResources().getDisplayMetrics().density * 180);
         android.widget.LinearLayout.LayoutParams wvLP =
             new android.widget.LinearLayout.LayoutParams(-1, wvHeightPx);

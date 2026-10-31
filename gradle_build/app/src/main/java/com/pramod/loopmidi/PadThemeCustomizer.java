@@ -2,6 +2,7 @@ package com.pramod.loopmidi;
 
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
@@ -32,9 +33,11 @@ import java.io.InputStream;
 final class PadThemeCustomizer {
     static final int REQUEST_PAD_IMAGE = 5011;
     static final int REQUEST_BACKGROUND_IMAGE = 5012;
+    static final int REQUEST_COMBINED_IMAGE = 5013;
     private static final String KEY_PRESET = "theme_preset";
     private static final String KEY_BORDER_ALL = "theme_border_all";
     private static final String KEY_BORDER_COLOR = "theme_border_color_";
+    private static final String KEY_BORDER_PRESET = "theme_border_preset_";
 
     private static final String TAG = "PadThemeCustomizer";
     private static final String KEY_PAD_IMAGE = "theme_pad_image_";
@@ -44,6 +47,14 @@ final class PadThemeCustomizer {
     private static final String KEY_ANIMATION_MODE = "theme_animation_mode";
     private static final int MODE_IMAGE_PULSE = 0;
     private static final int MODE_SHADOW_PULSE = 1;
+    private static final int BORDER_NONE = 0;
+    private static final int BORDER_NEON = 1;
+    private static final int BORDER_RED = 2;
+    private static final int BORDER_GREEN = 3;
+    private static final int BORDER_YELLOW = 4;
+    private static final int BORDER_BLUE = 5;
+    private static final int BORDER_PURPLE = 6;
+    private static final int BORDER_RGB = 7;
 
     private final Activity activity;
     private final SharedPreferences preferences;
@@ -166,18 +177,38 @@ final class PadThemeCustomizer {
                 preferences.getInt(KEY_PAD_OPACITY + selectedPad[0], 70),
                 progress -> setPadOpacity(selectedPad[0], progress), padOpacityLabel);
 
+        addSectionTitle(content, "COMBINED PHOTO");
+        Button chooseCombinedImage = addButton(content,
+                "Apply one photo to all 8 pads and the background");
+        chooseCombinedImage.setOnClickListener(v -> {
+            launchPicker(REQUEST_COMBINED_IMAGE);
+        });
+        Button clearCombinedImage = addButton(content,
+                "Remove combined photo from all pads and background");
+        clearCombinedImage.setOnClickListener(v -> clearCombinedImage());
+
         CheckBox sameBorderForAll = new CheckBox(activity);
-        sameBorderForAll.setText("Apply border color to all pads");
+        sameBorderForAll.setText("Global mode: apply border preset to all 8 pads");
         sameBorderForAll.setChecked(preferences.getBoolean(KEY_BORDER_ALL, true));
         content.addView(sameBorderForAll);
-        addSectionTitle(content, "PAD BORDER COLOR");
-        LinearLayout borderColors = new LinearLayout(activity);
-        borderColors.setOrientation(LinearLayout.HORIZONTAL);
-        addBorderButton(borderColors, "Red", 0xFFFF3333, selectedPad, sameBorderForAll);
-        addBorderButton(borderColors, "Blue", 0xFF168BFF, selectedPad, sameBorderForAll);
-        addBorderButton(borderColors, "Yellow", 0xFFFFD600, selectedPad, sameBorderForAll);
-        addBorderButton(borderColors, "None", 0, selectedPad, sameBorderForAll);
-        content.addView(borderColors);
+        addSectionTitle(content, "PAD TOUCH BORDER COLOR");
+        TextView borderModeHint = new TextView(activity);
+        borderModeHint.setText("Individual mode uses the selected pad above.");
+        content.addView(borderModeHint);
+        String[] borderNames = {"Neon", "Red", "Green", "Yellow",
+                "Blue", "Purple", "RGB", "None"};
+        int[] borderPresets = {BORDER_NEON, BORDER_RED, BORDER_GREEN, BORDER_YELLOW,
+                BORDER_BLUE, BORDER_PURPLE, BORDER_RGB, BORDER_NONE};
+        for (int row = 0; row < 2; row++) {
+            LinearLayout borderColors = new LinearLayout(activity);
+            borderColors.setOrientation(LinearLayout.HORIZONTAL);
+            for (int column = 0; column < 4; column++) {
+                int index = row * 4 + column;
+                addBorderButton(borderColors, borderNames[index], borderPresets[index],
+                        selectedPad, sameBorderForAll);
+            }
+            content.addView(borderColors);
+        }
         sameBorderForAll.setOnCheckedChangeListener((button, checked) ->
                 preferences.edit().putBoolean(KEY_BORDER_ALL, checked).apply());
 
@@ -223,7 +254,8 @@ final class PadThemeCustomizer {
     }
 
     boolean handlesPickerRequest(int requestCode) {
-        return requestCode == REQUEST_PAD_IMAGE || requestCode == REQUEST_BACKGROUND_IMAGE;
+        return requestCode == REQUEST_PAD_IMAGE || requestCode == REQUEST_BACKGROUND_IMAGE
+                || requestCode == REQUEST_COMBINED_IMAGE;
     }
 
     void handlePickerResult(int requestCode, int resultCode, Intent data) {
@@ -256,8 +288,17 @@ final class PadThemeCustomizer {
                 } else {
                     applyPadImage(pickerPadIndex);
                 }
-            } else {
+            } else if (requestCode == REQUEST_BACKGROUND_IMAGE) {
                 preferences.edit().putString(KEY_BACKGROUND_IMAGE, uri.toString()).apply();
+                applyGlobalBackground();
+            } else if (requestCode == REQUEST_COMBINED_IMAGE) {
+                SharedPreferences.Editor editor = preferences.edit()
+                        .putString(KEY_BACKGROUND_IMAGE, uri.toString());
+                for (int i = 0; i < pads.length; i++) {
+                    editor.putString(KEY_PAD_IMAGE + i, uri.toString());
+                }
+                editor.apply();
+                for (int i = 0; i < pads.length; i++) applyPadImage(i);
                 applyGlobalBackground();
             }
         } catch (Exception error) {
@@ -268,6 +309,7 @@ final class PadThemeCustomizer {
     }
 
     void onPadHit(int padIndex, View pad) {
+        animateTouchBorder(padIndex);
         int mode = preferences.getInt(KEY_ANIMATION_MODE, MODE_IMAGE_PULSE);
         if (mode == MODE_SHADOW_PULSE) {
             float raisedZ = dp(12);
@@ -284,9 +326,14 @@ final class PadThemeCustomizer {
         Drawable background = pads[padIndex].getBackground();
         if (!(background instanceof LayerDrawable)) return;
         LayerDrawable layers = (LayerDrawable) background;
-        if (layers.getNumberOfLayers() < 2
-                || !(layers.getDrawable(1) instanceof BitmapDrawable)) return;
-        BitmapDrawable image = (BitmapDrawable) layers.getDrawable(1);
+        BitmapDrawable image = null;
+        for (int i = 1; i < layers.getNumberOfLayers(); i++) {
+            if (layers.getDrawable(i) instanceof BitmapDrawable) {
+                image = (BitmapDrawable) layers.getDrawable(i);
+                break;
+            }
+        }
+        if (image == null) return;
         int restingAlpha = preferences.getInt(KEY_PAD_OPACITY + padIndex, 70) * 255 / 100;
         ObjectAnimator pulse = ObjectAnimator.ofInt(
                 image, "alpha", restingAlpha, Math.min(255, restingAlpha + 90), restingAlpha);
@@ -314,7 +361,7 @@ final class PadThemeCustomizer {
             Bitmap bitmap = decodeImage(Uri.parse(uriText), 1024);
             BitmapDrawable image = new BitmapDrawable(activity.getResources(), bitmap);
             image.setAlpha(preferences.getInt(KEY_PAD_OPACITY + padIndex, 70) * 255 / 100);
-            int borderColor = preferences.getInt(KEY_BORDER_COLOR + padIndex, 0);
+            int borderColor = getBorderColor(padIndex);
             Drawable border = createPadBorder(borderColor);
             pads[padIndex].setBackground(borderColor == 0
                     ? new LayerDrawable(new Drawable[]{base, image})
@@ -528,7 +575,7 @@ final class PadThemeCustomizer {
     }
 
     private Drawable addPadBorder(int padIndex, Drawable base) {
-        int color = preferences.getInt(KEY_BORDER_COLOR + padIndex, 0);
+        int color = getBorderColor(padIndex);
         if (color == 0) return base;
         return new LayerDrawable(new Drawable[]{base, createPadBorder(color)});
     }
@@ -542,11 +589,12 @@ final class PadThemeCustomizer {
         return border;
     }
 
-    private void addBorderButton(LinearLayout row, String label, int color, int[] selectedPad,
+    private void addBorderButton(LinearLayout row, String label, int preset, int[] selectedPad,
                                  CheckBox sameBorderForAll) {
         Button button = new Button(activity);
         button.setText(label);
         button.setTextColor(Color.WHITE);
+        int color = borderColorForPreset(preset);
         button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
                 color == 0 ? 0xFF333333 : color));
         row.addView(button, new LinearLayout.LayoutParams(0, dp(48), 1f));
@@ -554,14 +602,91 @@ final class PadThemeCustomizer {
             SharedPreferences.Editor editor = preferences.edit();
             if (sameBorderForAll.isChecked()) {
                 for (int i = 0; i < pads.length; i++) {
-                    editor.putInt(KEY_BORDER_COLOR + i, color);
+                    putBorderPreset(editor, i, preset);
                 }
             } else {
-                editor.putInt(KEY_BORDER_COLOR + selectedPad[0], color);
+                putBorderPreset(editor, selectedPad[0], preset);
             }
             editor.apply();
             for (int i = 0; i < pads.length; i++) applyPadImage(i);
         });
+    }
+
+    private void putBorderPreset(SharedPreferences.Editor editor, int padIndex, int preset) {
+        editor.putInt(KEY_BORDER_PRESET + padIndex, preset)
+                .putInt(KEY_BORDER_COLOR + padIndex, borderColorForPreset(preset));
+    }
+
+    private int getBorderPreset(int padIndex) {
+        if (preferences.contains(KEY_BORDER_PRESET + padIndex)) {
+            int preset = preferences.getInt(KEY_BORDER_PRESET + padIndex, BORDER_NONE);
+            return preset >= BORDER_NONE && preset <= BORDER_RGB ? preset : BORDER_NONE;
+        }
+        int legacyColor = preferences.getInt(KEY_BORDER_COLOR + padIndex, 0);
+        if (legacyColor == 0) return BORDER_NONE;
+        if (legacyColor == 0xFFFF3333) return BORDER_RED;
+        if (legacyColor == 0xFF168BFF) return BORDER_BLUE;
+        if (legacyColor == 0xFFFFD600) return BORDER_YELLOW;
+        return BORDER_NEON;
+    }
+
+    private int getBorderColor(int padIndex) {
+        return borderColorForPreset(getBorderPreset(padIndex));
+    }
+
+    private int borderColorForPreset(int preset) {
+        switch (preset) {
+            case BORDER_NEON: return 0xFF39FF14;
+            case BORDER_RED: return 0xFFFF3333;
+            case BORDER_GREEN: return 0xFF00E676;
+            case BORDER_YELLOW: return 0xFFFFD600;
+            case BORDER_BLUE: return 0xFF168BFF;
+            case BORDER_PURPLE: return 0xFFB04DFF;
+            case BORDER_RGB: return 0xFFFF00FF;
+            default: return 0;
+        }
+    }
+
+    private void animateTouchBorder(int padIndex) {
+        if (getBorderPreset(padIndex) == BORDER_NONE) return;
+        Drawable background = pads[padIndex].getBackground();
+        if (!(background instanceof LayerDrawable)) return;
+        LayerDrawable layers = (LayerDrawable) background;
+        Drawable lastLayer = layers.getDrawable(layers.getNumberOfLayers() - 1);
+        if (!(lastLayer instanceof GradientDrawable)) return;
+        GradientDrawable border = (GradientDrawable) lastLayer;
+        int preset = getBorderPreset(padIndex);
+        ValueAnimator animation;
+        if (preset == BORDER_RGB) {
+            int[] colors = {0xFFFF3333, 0xFFFFD600, 0xFF00E676, 0xFF168BFF,
+                    0xFFB04DFF, 0xFFFF00FF};
+            animation = ValueAnimator.ofObject(new android.animation.ArgbEvaluator(),
+                    colors[0], colors[1], colors[2], colors[3], colors[4], colors[5]);
+            animation.setRepeatCount(1);
+            animation.setRepeatMode(ValueAnimator.REVERSE);
+        } else {
+            int color = borderColorForPreset(preset);
+            int dimColor = (color & 0x00FFFFFF) | 0x66000000;
+            animation = ValueAnimator.ofObject(new android.animation.ArgbEvaluator(),
+                    color, dimColor, color);
+        }
+        animation.setDuration(240);
+        animation.addUpdateListener(valueAnimator ->
+                border.setStroke(dp(3), (Integer) valueAnimator.getAnimatedValue()));
+        animation.start();
+    }
+
+    private void clearCombinedImage() {
+        SharedPreferences.Editor editor = preferences.edit()
+                .remove(KEY_BACKGROUND_IMAGE);
+        for (int i = 0; i < pads.length; i++) {
+            editor.remove(KEY_PAD_IMAGE + i);
+        }
+        editor.apply();
+        for (int i = 0; i < pads.length; i++) applyPadImage(i);
+        applyGlobalBackground();
+        Toast.makeText(activity, "Combined photo removed from pads and background",
+                Toast.LENGTH_SHORT).show();
     }
 
     private void updateSelectedPadButtons(Button[] buttons, int selectedPad) {
