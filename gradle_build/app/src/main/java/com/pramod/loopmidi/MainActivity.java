@@ -3039,7 +3039,15 @@ public class MainActivity extends Activity {
             return;
         }
         kitLoadExecutor.execute(() -> {
-            short[] pcm = engine.decodeUriToPcm(uri);
+            short[] pcm;
+            try {
+                pcm = engine.decodeUriToPcm(uri);
+            } catch (IOException error) {
+                Log.e(TAG, "Could not decode selected audio for trimming", error);
+                runOnUiThread(() -> Toast.makeText(this, "Could not read selected audio",
+                        Toast.LENGTH_LONG).show());
+                return;
+            }
             runOnUiThread(() -> {
                 if (pcm == null || pcm.length < 2) {
                     Toast.makeText(this, "Could not decode selected audio", Toast.LENGTH_LONG).show();
