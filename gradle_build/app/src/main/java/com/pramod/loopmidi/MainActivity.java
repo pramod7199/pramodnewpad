@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
     private boolean isForceLogoutInProgress = false;
     private Button btnEq;
     private Button btnPadEdit;
+    private PadThemeCustomizer themeCustomizer;
     private Button btnLoadKit;
     private Button btnLoops;
     private Button btnNextKit;
@@ -1742,6 +1743,9 @@ public class MainActivity extends Activity {
                 AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
         } catch (Exception ignored) {}
         initPads();
+        this.themeCustomizer = new PadThemeCustomizer(this, this.prefs, this.pads,
+                findViewById(R.id.rootMain));
+        this.themeCustomizer.applySavedTheme();
         initSeekBars();
         setupFavorites();
         // Restore velocity sensitivity mode from prefs
@@ -2310,6 +2314,9 @@ public class MainActivity extends Activity {
                     MainActivity.this.playPadSoundImmediate(this.index);
                 }
                 v.setPressed(true);
+                if (MainActivity.this.themeCustomizer != null) {
+                    MainActivity.this.themeCustomizer.onPadHit(this.index, v);
+                }
                 MainActivity.this.selectedPad = this.index;
                 if (!MainActivity.this.editMode || MainActivity.this.copySourcePad == -1 || MainActivity.this.copySourcePad == this.index) {
                     if (!MainActivity.this.editMode || MainActivity.this.swapSourcePad == -1 || MainActivity.this.swapSourcePad == this.index) {
@@ -2361,7 +2368,8 @@ public class MainActivity extends Activity {
     public void showEditPadOptions(final int padIndex) {
         String copyText = this.copySourcePad == -1 ? "Pad Sound Copy (Select Source)" : "Pad Sound Copy (Paste Mode ON)";
         String swapText = this.swapSourcePad == -1 ? "Pad Sound Exchange (Select First Pad)" : "Pad Sound Exchange (Swap Mode ON)";
-        String[] options = {"Pad Select Sound", copyText, swapText, "Clear Pad Sound"};
+        String[] options = {"Pad Select Sound", copyText, swapText, "Clear Pad Sound",
+                "Customize Theme"};
         new AlertDialog.Builder(this).setTitle("PAD " + (padIndex + 1) + " - EDIT OPTIONS").setItems(options, new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.21
 
 
@@ -2412,6 +2420,11 @@ public class MainActivity extends Activity {
                         MainActivity mainActivity = MainActivity.this;
                         mainActivity.saveKitToMemory(mainActivity.kitIndex);
                         Toast.makeText(MainActivity.this, "PAD " + (padIndex + 1) + " Cleared!", 0).show();
+                        return;
+                    } else if (which == 4) {
+                        if (MainActivity.this.themeCustomizer != null) {
+                            MainActivity.this.themeCustomizer.showDialog(padIndex);
+                        }
                         return;
                     } else {
                         return;
@@ -2905,6 +2918,11 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         Uri uri;
         super.onActivityResult(requestCode, resultCode, data);
+        if (this.themeCustomizer != null
+                && this.themeCustomizer.handlesPickerRequest(requestCode)) {
+            this.themeCustomizer.handlePickerResult(requestCode, resultCode, data);
+            return;
+        }
         if (resultCode != -1 || data == null || (uri = data.getData()) == null) {
             return;
         }
