@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
     private Uri assistSoundUri;
     private AudioEngine audioEngine;
     private Button btnEditMode;
+    private Button btnThemeToggle;
     private Button btnSignOut;
     private TextView txtSignedInAs;
     // ── Admin deactivation real-time listener ──
@@ -176,6 +177,7 @@ public class MainActivity extends Activity {
     private float drumMasterPitch = 1.0f;
     private int selectedPad = 0;
     private boolean editMode = false;
+    private boolean themeMode = false;
     private int kitIndex  = 1;   // Bank A's active kit number
     private int kitIndexB = 1;   // Bank B's active kit number (independent of Bank A)
     private String currentKitName  = "KIT 1";
@@ -1587,6 +1589,7 @@ public class MainActivity extends Activity {
         this.txtMidiStatus = (TextView) findViewById(R.id.txtMidiStatus);
         this.txtMidiStatus.setText("MIDI status: disconnected");
         this.btnEditMode = (Button) findViewById(R.id.btnEditMode);
+        this.btnThemeToggle = (Button) findViewById(R.id.btnThemeToggle);
         this.btnSaveKit = (Button) findViewById(R.id.btnSaveKit);
         this.btnLoadKit = (Button) findViewById(R.id.btnLoadKit);
         this.btnRenameKit = (Button) findViewById(R.id.btnRenameKit);
@@ -1810,6 +1813,15 @@ public class MainActivity extends Activity {
                 mainActivity.saveKitToMemory(mainActivity.kitIndex);
             }
         });
+        if (this.btnThemeToggle != null) {
+            this.btnThemeToggle.setOnClickListener(v -> {
+                themeMode = !themeMode;
+                updateThemeButtonUI();
+                if (themeMode && themeCustomizer != null) {
+                    themeCustomizer.showDialog(selectedPad);
+                }
+            });
+        }
         // ── Bank selector buttons (BANK A / BANK B / A+B LAYER) ───────────────
         // Each button sets the bank mode directly — no cycling.
         if (this.btnBankA != null) {
@@ -2211,6 +2223,13 @@ public class MainActivity extends Activity {
         this.btnEditMode.setBackgroundResource(this.editMode ? R.drawable.btn_3d_red : R.drawable.btn_3d_dark);
     }
 
+    private void updateThemeButtonUI() {
+        if (btnThemeToggle == null) return;
+        btnThemeToggle.setText(themeMode ? "THEME ON" : "THEME OFF");
+        btnThemeToggle.setBackgroundResource(
+                themeMode ? R.drawable.btn_3d_orange : R.drawable.btn_3d_dark);
+    }
+
     /** Highlights the active bank selector button (A / B / A+B) to match bankMode. */
     public void updateBankToggleButton() {
         // Highlight the active bank button; dim the others.
@@ -2309,6 +2328,15 @@ public class MainActivity extends Activity {
                 }
                 MainActivity.this.lastHitTime[this.index] = now;
                 MainActivity.this.activePointerId[this.index] = pointerId;
+                if (MainActivity.this.themeMode) {
+                    v.setPressed(true);
+                    MainActivity.this.selectedPad = this.index;
+                    MainActivity.this.txtSelectedPad.setText("Selected: PAD " + (this.index + 1));
+                    if (MainActivity.this.themeCustomizer != null) {
+                        MainActivity.this.themeCustomizer.showDialog(this.index);
+                    }
+                    return true;
+                }
                 // ── Audio BEFORE visual — fire sound with zero setPressed overhead ──
                 if (!MainActivity.this.editMode) {
                     MainActivity.this.playPadSoundImmediate(this.index);
@@ -2369,7 +2397,7 @@ public class MainActivity extends Activity {
         String copyText = this.copySourcePad == -1 ? "Pad Sound Copy (Select Source)" : "Pad Sound Copy (Paste Mode ON)";
         String swapText = this.swapSourcePad == -1 ? "Pad Sound Exchange (Select First Pad)" : "Pad Sound Exchange (Swap Mode ON)";
         String[] options = {"Pad Select Sound", copyText, swapText, "Clear Pad Sound",
-                "Customize Theme"};
+                "Trim Loaded Sound"};
         new AlertDialog.Builder(this).setTitle("PAD " + (padIndex + 1) + " - EDIT OPTIONS").setItems(options, new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.21
 
 
@@ -2402,6 +2430,8 @@ public class MainActivity extends Activity {
                             MainActivity.this.padEqMidB[padIndex] = 0.0f;
                             MainActivity.this.padEqLowB[padIndex] = 0.0f;
                             MainActivity.this.padChokeGroupB[padIndex] = 0;
+                            MainActivity.this.clearTrimRange(true, MainActivity.this.kitIndexB,
+                                    padIndex);
                         } else {
                             // Clear Bank A pad
                             MainActivity.this.selectedWavUris[padIndex] = null;
@@ -2416,15 +2446,15 @@ public class MainActivity extends Activity {
                             MainActivity.this.padEqMid[padIndex] = 0.0f;
                             MainActivity.this.padEqLow[padIndex] = 0.0f;
                             MainActivity.this.padChokeGroup[padIndex] = 0;
+                            MainActivity.this.clearTrimRange(false, MainActivity.this.kitIndex,
+                                    padIndex);
                         }
                         MainActivity mainActivity = MainActivity.this;
                         mainActivity.saveKitToMemory(mainActivity.kitIndex);
                         Toast.makeText(MainActivity.this, "PAD " + (padIndex + 1) + " Cleared!", 0).show();
                         return;
                     } else if (which == 4) {
-                        if (MainActivity.this.themeCustomizer != null) {
-                            MainActivity.this.themeCustomizer.showDialog(padIndex);
-                        }
+                        MainActivity.this.trimLoadedPad(padIndex);
                         return;
                     } else {
                         return;
@@ -2759,6 +2789,7 @@ public class MainActivity extends Activity {
         }
         // ── Bank-aware copy: operate on the active bank's arrays ─────────────
         if (bankMode == BANK_B) {
+            copyTrimRange(true, kitIndexB, fromPad, toPad);
             Uri srcUri = this.selectedWavUrisB[fromPad];
             this.selectedWavUrisB[toPad]  = srcUri;
             this.selectedRawResIdsB[toPad] = this.selectedRawResIdsB[fromPad];
@@ -2782,8 +2813,10 @@ public class MainActivity extends Activity {
                 this.samplesB[toPad] = null;
                 Toast.makeText(this, "Error copying sound: " + e.getMessage(), 0).show();
             }
+            applySavedTrimToSlot(true, kitIndexB, toPad);
         } else {
             // Bank A (or Layer — copy applies to Bank A)
+            copyTrimRange(false, kitIndex, fromPad, toPad);
             Uri[] uriArr = this.selectedWavUris;
             Uri uri = uriArr[fromPad];
             uriArr[toPad] = uri;
@@ -2818,6 +2851,7 @@ public class MainActivity extends Activity {
                 this.samples[toPad] = null;
                 Toast.makeText(this, "Error copying sound: " + e.getMessage(), 0).show();
             }
+            applySavedTrimToSlot(false, kitIndex, toPad);
         }
         saveKitToMemory(this.kitIndex);
         Toast.makeText(this, "Copied PAD " + (fromPad + 1) + " -> PAD " + (toPad + 1), 0).show();
@@ -2830,6 +2864,7 @@ public class MainActivity extends Activity {
         // ── Bank-aware swap: operate on the active bank's arrays ─────────────
         try {
             if (bankMode == BANK_B) {
+                swapTrimRanges(true, kitIndexB, padA, padB);
                 // Swap Bank B arrays
                 Uri tempUri = this.selectedWavUrisB[padA];
                 this.selectedWavUrisB[padA] = this.selectedWavUrisB[padB];
@@ -2872,6 +2907,7 @@ public class MainActivity extends Activity {
                 if (uriB != null) this.samplesB[padB] = this.audioEngine.loadWavFromUri(padB + 8, uriB);
                 else { int r = this.selectedRawResIdsB[padB]; this.samplesB[padB] = (r != 0) ? this.audioEngine.loadRawSound(padB + 8, r) : null; }
             } else {
+                swapTrimRanges(false, kitIndex, padA, padB);
                 // Swap Bank A arrays (also used in Layer mode)
                 Uri[] uriArr = this.selectedWavUris;
                 Uri tempUri = uriArr[padA];
@@ -2907,11 +2943,257 @@ public class MainActivity extends Activity {
                 if (uriB != null) this.samples[padB] = this.audioEngine.loadWavFromUri(padB, uriB);
                 else { int r = iArr[padB]; this.samples[padB] = (r != 0) ? this.audioEngine.loadRawSound(padB, r) : null; }
             }
+            if (bankMode == BANK_B) {
+                applySavedTrimToSlot(true, kitIndexB, padA);
+                applySavedTrimToSlot(true, kitIndexB, padB);
+            } else {
+                applySavedTrimToSlot(false, kitIndex, padA);
+                applySavedTrimToSlot(false, kitIndex, padB);
+            }
         } catch (IOException e) {
             Toast.makeText(this, "Error swapping sounds: " + e.getMessage(), 0).show();
         }
         saveKitToMemory(this.kitIndex);
         Toast.makeText(this, "Swapped PAD " + (padA + 1) + " <-> PAD " + (padB + 1), 0).show();
+    }
+
+    private void copyTrimRange(boolean bankB, int kitNo, int fromPad, int toPad) {
+        prefs.edit()
+                .putInt(trimStartKey(bankB, kitNo, toPad),
+                        prefs.getInt(trimStartKey(bankB, kitNo, fromPad), 0))
+                .putInt(trimEndKey(bankB, kitNo, toPad),
+                        prefs.getInt(trimEndKey(bankB, kitNo, fromPad), 1000))
+                .apply();
+    }
+
+    private void swapTrimRanges(boolean bankB, int kitNo, int padA, int padB) {
+        int startA = prefs.getInt(trimStartKey(bankB, kitNo, padA), 0);
+        int endA = prefs.getInt(trimEndKey(bankB, kitNo, padA), 1000);
+        int startB = prefs.getInt(trimStartKey(bankB, kitNo, padB), 0);
+        int endB = prefs.getInt(trimEndKey(bankB, kitNo, padB), 1000);
+        prefs.edit()
+                .putInt(trimStartKey(bankB, kitNo, padA), startB)
+                .putInt(trimEndKey(bankB, kitNo, padA), endB)
+                .putInt(trimStartKey(bankB, kitNo, padB), startA)
+                .putInt(trimEndKey(bankB, kitNo, padB), endA)
+                .apply();
+    }
+
+    private void clearTrimRange(boolean bankB, int kitNo, int padIndex) {
+        prefs.edit()
+                .remove(trimStartKey(bankB, kitNo, padIndex))
+                .remove(trimEndKey(bankB, kitNo, padIndex))
+                .apply();
+    }
+
+    private void applySavedTrimToSlot(boolean bankB, int kitNo, int padIndex) {
+        Uri uri = bankB ? selectedWavUrisB[padIndex] : selectedWavUris[padIndex];
+        int rawId = bankB ? selectedRawResIdsB[padIndex] : selectedRawResIds[padIndex];
+        if (uri == null && rawId == 0) return;
+        try {
+            short[] pcm = uri != null
+                    ? audioEngine.decodeUriToPcm(uri) : audioEngine.decodeRawToPcm(rawId);
+            if (pcm == null || pcm.length < 2) {
+                Log.e(TAG, "Could not reload copied pad audio for trim");
+                return;
+            }
+            short[] trimmed = trimPcm(pcm,
+                    prefs.getInt(trimStartKey(bankB, kitNo, padIndex), 0),
+                    prefs.getInt(trimEndKey(bankB, kitNo, padIndex), 1000));
+            int slot = bankB ? padIndex + 8 : padIndex;
+            if (!audioEngine.uploadPcm(slot, trimmed)) {
+                Log.e(TAG, "Could not apply copied pad trim to audio slot " + slot);
+            }
+        } catch (Exception error) {
+            Log.e(TAG, "Could not apply copied pad trim", error);
+        }
+    }
+
+    private static String trimStartKey(boolean bankB, int kitNo, int padIndex) {
+        return "kit_" + kitNo + (bankB ? "_B" : "") + "_trim_start_" + padIndex;
+    }
+
+    private static String trimEndKey(boolean bankB, int kitNo, int padIndex) {
+        return "kit_" + kitNo + (bankB ? "_B" : "") + "_trim_end_" + padIndex;
+    }
+
+    private static short[] trimPcm(short[] pcm, int startPermille, int endPermille) {
+        if (pcm == null || pcm.length < 2) return pcm;
+        int frames = pcm.length / 2;
+        int startFrame = (int) ((long) frames * Math.max(0, Math.min(999, startPermille)) / 1000);
+        int endFrame = (int) ((long) frames * Math.max(1, Math.min(1000, endPermille)) / 1000);
+        startFrame = Math.min(startFrame, frames - 1);
+        endFrame = Math.max(startFrame + 1, Math.min(frames, endFrame));
+        if (startFrame == 0 && endFrame == frames) return pcm;
+        return java.util.Arrays.copyOfRange(pcm, startFrame * 2, endFrame * 2);
+    }
+
+    private void beginAudioImport(Uri uri) {
+        final int padIndex = selectedPad;
+        final boolean bankB = bankMode == BANK_B;
+        final int kitNo = bankB ? kitIndexB : kitIndex;
+        final int slot = bankB ? padIndex + 8 : padIndex;
+        final AudioEngine engine = audioEngine;
+        if (engine == null) {
+            Toast.makeText(this, "Audio engine is not ready", Toast.LENGTH_LONG).show();
+            return;
+        }
+        kitLoadExecutor.execute(() -> {
+            short[] pcm = engine.decodeUriToPcm(uri);
+            runOnUiThread(() -> {
+                if (pcm == null || pcm.length < 2) {
+                    Toast.makeText(this, "Could not decode selected audio", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                showAudioTrimDialog(uri, 0, pcm, padIndex, bankB, kitNo, slot,
+                        0, 1000, true, "Trim before loading PAD " + (padIndex + 1));
+            });
+        });
+    }
+
+    private void trimLoadedPad(int padIndex) {
+        final boolean bankB = bankMode == BANK_B;
+        final int kitNo = bankB ? kitIndexB : kitIndex;
+        final Uri uri = bankB ? selectedWavUrisB[padIndex] : selectedWavUris[padIndex];
+        final int rawId = bankB ? selectedRawResIdsB[padIndex] : selectedRawResIds[padIndex];
+        final int slot = bankB ? padIndex + 8 : padIndex;
+        final AudioEngine engine = audioEngine;
+        if (engine == null || (uri == null && rawId == 0)) {
+            Toast.makeText(this, "No loaded audio to trim on PAD " + (padIndex + 1),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        kitLoadExecutor.execute(() -> {
+            short[] pcm;
+            try {
+                pcm = uri != null ? engine.decodeUriToPcm(uri) : engine.decodeRawToPcm(rawId);
+            } catch (Exception error) {
+                Log.e(TAG, "Could not decode loaded pad for trimming", error);
+                pcm = null;
+            }
+            short[] decodedPcm = pcm;
+            runOnUiThread(() -> {
+                if (decodedPcm == null || decodedPcm.length < 2) {
+                    Toast.makeText(this, "Could not read the loaded pad audio",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+                showAudioTrimDialog(uri, rawId, decodedPcm, padIndex, bankB, kitNo, slot,
+                        prefs.getInt(trimStartKey(bankB, kitNo, padIndex), 0),
+                        prefs.getInt(trimEndKey(bankB, kitNo, padIndex), 1000),
+                        false, "Trim loaded PAD " + (padIndex + 1));
+            });
+        });
+    }
+
+    private void showAudioTrimDialog(Uri sourceUri, int rawId, short[] sourcePcm, int padIndex,
+                                     boolean bankB, int kitNo, int slot, int initialStart,
+                                     int initialEnd, boolean newSound, String title) {
+        android.widget.LinearLayout content = new android.widget.LinearLayout(this);
+        content.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int padding = Math.round(18 * getResources().getDisplayMetrics().density);
+        content.setPadding(padding, padding, padding, padding);
+
+        android.widget.TextView startLabel = new android.widget.TextView(this);
+        startLabel.setText("Start: " + initialStart / 10.0f + "%");
+        content.addView(startLabel);
+        android.widget.SeekBar startSeek = new android.widget.SeekBar(this);
+        startSeek.setMax(999);
+        int startValue = Math.max(0, Math.min(998, initialStart));
+        int endValue = Math.max(startValue + 1, Math.min(1000, initialEnd));
+        startSeek.setProgress(startValue);
+        content.addView(startSeek);
+
+        android.widget.TextView endLabel = new android.widget.TextView(this);
+        endLabel.setText("End: " + initialEnd / 10.0f + "%");
+        content.addView(endLabel);
+        android.widget.SeekBar endSeek = new android.widget.SeekBar(this);
+        endSeek.setMax(1000);
+        endSeek.setProgress(endValue);
+        content.addView(endSeek);
+
+        startSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (progress >= endSeek.getProgress()) {
+                    startSeek.setProgress(Math.max(0, endSeek.getProgress() - 1));
+                    progress = startSeek.getProgress();
+                }
+                startLabel.setText("Start: " + progress / 10.0f + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+        endSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (progress <= startSeek.getProgress()) {
+                    endSeek.setProgress(Math.min(1000, startSeek.getProgress() + 1));
+                    progress = endSeek.getProgress();
+                }
+                endLabel.setText("End: " + progress / 10.0f + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage("Choose the audio section to keep.")
+                .setView(content)
+                .setPositiveButton(newSound ? "Trim & Load" : "Apply Trim",
+                        (dialog, which) -> {
+                            int start = startSeek.getProgress();
+                            int end = endSeek.getProgress();
+                            if (end <= start) {
+                                Toast.makeText(this, "End must be after start",
+                                        Toast.LENGTH_LONG).show();
+                                return;
+                            }
+                            short[] trimmed = trimPcm(sourcePcm, start, end);
+                            AudioEngine engine = audioEngine;
+                            if (engine == null || !engine.uploadPcm(slot, trimmed)) {
+                                Toast.makeText(this, "Could not apply audio trim",
+                                        Toast.LENGTH_LONG).show();
+                                return;
+                            }
+                            AudioEngine.SampleData sample = new AudioEngine.SampleData();
+                            sample.uri = sourceUri;
+                            sample.soundId = slot;
+                            sample.loaded = true;
+                            if (bankB) {
+                                selectedWavUrisB[padIndex] = sourceUri;
+                                selectedRawResIdsB[padIndex] = rawId;
+                                samplesB[padIndex] = sample;
+                                loadedSoundKitB = kitNo;
+                            } else {
+                                selectedWavUris[padIndex] = sourceUri;
+                                selectedRawResIds[padIndex] = rawId;
+                                samples[padIndex] = sample;
+                                loadedSoundKitA = kitNo;
+                            }
+                            prefs.edit()
+                                    .putInt(trimStartKey(bankB, kitNo, padIndex), start)
+                                    .putInt(trimEndKey(bankB, kitNo, padIndex), end)
+                                    .commit();
+                            saveKitToMemory(kitIndex);
+                            Toast.makeText(this, "Audio trim saved for PAD "
+                                    + (padIndex + 1), Toast.LENGTH_SHORT).show();
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     @Override // android.app.Activity
@@ -2945,25 +3227,8 @@ public class MainActivity extends Activity {
             if (requestCode == REQ_PICK_SINGLE_WAV) {
                 int takeFlags = data.getFlags() & 3;
                 getContentResolver().takePersistableUriPermission(uri, takeFlags);
-                int i = this.selectedPad;
-                // ── Bank-aware single WAV load ─────────────────────────────
-                if (this.bankMode == BANK_B) {
-                    this.selectedWavUrisB[i] = uri;
-                    this.selectedRawResIdsB[i] = 0;
-                    this.samplesB[i] = this.audioEngine.loadWavFromUri(i + 8, uri);
-                    if (this.samplesB[i] != null) {
-                        this.audioEngine.preloadSample(this.samplesB[i]);
-                    }
-                } else {
-                    this.selectedWavUris[i] = uri;
-                    this.selectedRawResIds[i] = 0;
-                    this.samples[i] = this.audioEngine.loadWavFromUri(i, uri);
-                    if (this.samples[i] != null) {
-                        this.audioEngine.preloadSample(this.samples[i]);
-                    }
-                }
-                saveKitToMemory(this.kitIndex);
-                Toast.makeText(this, "Sound Loaded & Saved!", 0).show();
+                beginAudioImport(uri);
+                return;
             } else if (requestCode == REQ_LOAD_FOLDER) {
                 getContentResolver().takePersistableUriPermission(uri, 1);
                 loadKitFromFolder(uri);
@@ -3246,6 +3511,11 @@ public class MainActivity extends Activity {
                         if (urisA[i] == null) rawsA[i] = fallbackRaw;
                     }
                 }
+                if (pcmsA[i] != null && pcmsA[i].length > 0) {
+                    pcmsA[i] = trimPcm(pcmsA[i],
+                            prefs.getInt(trimStartKey(false, kitNo, i), 0),
+                            prefs.getInt(trimEndKey(false, kitNo, i), 1000));
+                }
             } catch (Exception ignored) {}
         }
         final Uri[]     urisB = new Uri[8];
@@ -3277,6 +3547,11 @@ public class MainActivity extends Activity {
                         pcmsB[i] = fallbackPcm;
                         if (urisB[i] == null) rawsB[i] = fallbackRaw;
                     }
+                }
+                if (pcmsB[i] != null && pcmsB[i].length > 0) {
+                    pcmsB[i] = trimPcm(pcmsB[i],
+                            prefs.getInt(trimStartKey(true, kitB, i), 0),
+                            prefs.getInt(trimEndKey(true, kitB, i), 1000));
                 }
             } catch (Exception ignored) {}
         }
@@ -3345,6 +3620,8 @@ public class MainActivity extends Activity {
                 if (i2 >= 8) {
                     break;
                 }
+                if (loadIntoA) clearTrimRange(false, kitIndex, i2);
+                if (loadIntoB) clearTrimRange(true, kitIndexB, i2);
                 DocumentFile wav = kitFolder3.findFile(KitManager.DEFAULT_WAV_NAMES[i2]);
                 if (wav != null) {
                     if (loadIntoA) {
