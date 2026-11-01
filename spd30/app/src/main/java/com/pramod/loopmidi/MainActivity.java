@@ -2,6 +2,7 @@ package com.pramod.loopmidi;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.animation.ValueAnimator;
 import android.content.DialogInterface;
 import android.media.AudioManager;
 import android.text.InputType;
@@ -28,10 +29,13 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -72,6 +76,8 @@ public class MainActivity extends Activity {
     public static volatile MainActivity globalInstance = null;
 
     private View advControlBar;
+    private final View[] padLedIndicators = new View[PAD_COUNT];
+    private final ValueAnimator[] padLedAnimations = new ValueAnimator[PAD_COUNT];
     private AudioEngine.SampleData assistSoundId;
     private Uri assistSoundUri;
     private AudioEngine audioEngine;
@@ -94,6 +100,7 @@ public class MainActivity extends Activity {
     private Button btnSaveKit;
     private CheckBox chkDelay;
     private View fxControlBar;
+    private AlertDialog fxAdvancedDialog;
     private volatile boolean isVisible;
     // Velocity Sensitivity: when ON, MIDI velocity (0-127) scales the hit volume
     private boolean velocitySensitiveMode = false;
@@ -1871,24 +1878,7 @@ public class MainActivity extends Activity {
         });
         Button button2 = this.btnEq;
         if (button2 != null) {
-            button2.setOnClickListener(new View.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.11
-                @Override // android.view.View.OnClickListener
-                public void onClick(View v) {
-                    if (MainActivity.this.fxControlBar != null && MainActivity.this.advControlBar != null) {
-                        if (MainActivity.this.fxControlBar.getVisibility() == 0) {
-                            MainActivity.this.fxControlBar.setVisibility(8);
-                            MainActivity.this.advControlBar.setVisibility(8);
-                            MainActivity.this.setToggleStyle(
-                                    MainActivity.this.btnEq, R.drawable.toggle_pro_off);
-                            return;
-                        }
-                        MainActivity.this.fxControlBar.setVisibility(0);
-                        MainActivity.this.advControlBar.setVisibility(0);
-                        MainActivity.this.setToggleStyle(
-                                MainActivity.this.btnEq, R.drawable.toggle_pro_on);
-                    }
-                }
-            });
+            button2.setOnClickListener(v -> showFxAdvancedDialog());
         }
         // ── PAD EDIT button — full EQ/Gain/Volume/Pitch/Pan dialog ──────────
         if (this.btnPadEdit != null) {
@@ -1897,10 +1887,105 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void showFxAdvancedDialog() {
+        if (fxAdvancedDialog != null && fxAdvancedDialog.isShowing()) return;
+        if (fxControlBar == null || advControlBar == null
+                || !(fxControlBar.getParent() instanceof ViewGroup)
+                || fxControlBar.getParent() != advControlBar.getParent()) {
+            Log.e(TAG, "FX/advanced controls are not attached to the expected settings panel");
+            Toast.makeText(this, "FX settings are unavailable", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        ViewGroup originalParent = (ViewGroup) fxControlBar.getParent();
+        int fxOriginalIndex = originalParent.indexOfChild(fxControlBar);
+        int advOriginalIndex = originalParent.indexOfChild(advControlBar);
+        ViewGroup.LayoutParams fxOriginalParams = fxControlBar.getLayoutParams();
+        ViewGroup.LayoutParams advOriginalParams = advControlBar.getLayoutParams();
+        int fxOriginalVisibility = fxControlBar.getVisibility();
+        int advOriginalVisibility = advControlBar.getVisibility();
+        originalParent.removeView(fxControlBar);
+        originalParent.removeView(advControlBar);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(14), dp(14), dp(14), dp(14));
+        content.setBackgroundResource(R.drawable.spd30_bezel);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(content, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout fxSection = createFxDialogSection(content, "EFFECTS");
+        fxControlBar.setVisibility(View.VISIBLE);
+        fxSection.addView(fxControlBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout advancedSection = createFxDialogSection(content, "ADVANCED PAD CONTROLS");
+        advControlBar.setVisibility(View.VISIBLE);
+        advancedSection.addView(advControlBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("FX / ADVANCED")
+                .setView(scroll)
+                .setPositiveButton("CLOSE", (closedDialog, which) -> closedDialog.dismiss())
+                .create();
+        dialog.setOnDismissListener(dismissedDialog -> {
+            fxSection.removeView(fxControlBar);
+            advancedSection.removeView(advControlBar);
+            if (fxOriginalIndex <= advOriginalIndex) {
+                originalParent.addView(fxControlBar, fxOriginalIndex, fxOriginalParams);
+                originalParent.addView(advControlBar, advOriginalIndex, advOriginalParams);
+            } else {
+                originalParent.addView(advControlBar, advOriginalIndex, advOriginalParams);
+                originalParent.addView(fxControlBar, fxOriginalIndex, fxOriginalParams);
+            }
+            fxControlBar.setVisibility(fxOriginalVisibility);
+            advControlBar.setVisibility(advOriginalVisibility);
+            fxAdvancedDialog = null;
+            setToggleStyle(btnEq, R.drawable.toggle_pro_off);
+        });
+        fxAdvancedDialog = dialog;
+        setToggleStyle(btnEq, R.drawable.toggle_pro_on);
+        dialog.show();
+        if (dialog.getWindow() != null) {
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.86f);
+            int height = (int) (getResources().getDisplayMetrics().heightPixels * 0.84f);
+            dialog.getWindow().setBackgroundDrawableResource(R.drawable.spd30_bezel);
+            dialog.getWindow().setLayout(width, height);
+            dialog.getWindow().setGravity(Gravity.CENTER);
+        }
+    }
+
+    private LinearLayout createFxDialogSection(LinearLayout content, String title) {
+        TextView heading = new TextView(this);
+        heading.setText(title);
+        heading.setTextColor(0xFF202326);
+        heading.setTextSize(13);
+        heading.setPadding(dp(4), dp(4), dp(4), dp(6));
+        content.addView(heading, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout section = new LinearLayout(this);
+        section.setOrientation(LinearLayout.VERTICAL);
+        section.setPadding(dp(8), dp(8), dp(8), dp(8));
+        section.setBackgroundResource(R.drawable.spd30_control_panel);
+        LinearLayout.LayoutParams sectionParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        sectionParams.bottomMargin = dp(12);
+        content.addView(section, sectionParams);
+        return section;
+    }
+
     private void initPads() {
         int[] padIds = {R.id.pad1, R.id.pad2, R.id.pad3, R.id.pad4, R.id.pad5, R.id.pad6, R.id.pad7, R.id.pad8};
+        int[] ledIds = {R.id.padLed1, R.id.padLed2, R.id.padLed3, R.id.padLed4,
+                R.id.padLed5, R.id.padLed6, R.id.padLed7, R.id.padLed8};
         for (int i = 0; i < 8; i++) {
             this.pads[i] = (Button) findViewById(padIds[i]);
+            this.padLedIndicators[i] = findViewById(ledIds[i]);
             this.padVolume[i] = 0.8f;
             this.padPitch[i] = 1.0f;
             this.padDelayOn[i] = false;
@@ -1932,6 +2017,34 @@ public class MainActivity extends Activity {
         }
         if (this.seekMasterPitch != null) {
             this.seekMasterPitch.setProgress((int) (this.drumMasterPitch * 100.0f));
+        }
+    }
+
+    private void startPadLed(int padIndex) {
+        stopPadLed(padIndex);
+        View led = padLedIndicators[padIndex];
+        if (led == null) return;
+        led.setBackgroundResource(R.drawable.spd30_led_on);
+        ValueAnimator animation = ValueAnimator.ofFloat(1f, 0.2f);
+        animation.setDuration(110);
+        animation.setRepeatMode(ValueAnimator.REVERSE);
+        animation.setRepeatCount(ValueAnimator.INFINITE);
+        animation.addUpdateListener(value ->
+                led.setAlpha((Float) value.getAnimatedValue()));
+        padLedAnimations[padIndex] = animation;
+        animation.start();
+    }
+
+    private void stopPadLed(int padIndex) {
+        ValueAnimator animation = padLedAnimations[padIndex];
+        if (animation != null) {
+            animation.cancel();
+            padLedAnimations[padIndex] = null;
+        }
+        View led = padLedIndicators[padIndex];
+        if (led != null) {
+            led.setAlpha(1f);
+            led.setBackgroundResource(R.drawable.spd30_led_off);
         }
     }
 
@@ -2340,6 +2453,7 @@ public class MainActivity extends Activity {
                 if (MainActivity.this.activePointerId[this.index] == pointerId) {
                     MainActivity.this.activePointerId[this.index] = -1;
                     v.setPressed(false);
+                    MainActivity.this.stopPadLed(this.index);
                 }
                 return true;
             } else if (MainActivity.this.activePointerId[this.index] != -1) {
@@ -2351,6 +2465,7 @@ public class MainActivity extends Activity {
                 }
                 MainActivity.this.lastHitTime[this.index] = now;
                 MainActivity.this.activePointerId[this.index] = pointerId;
+                MainActivity.this.startPadLed(this.index);
                 if (MainActivity.this.themeMode) {
                     v.setPressed(true);
                     MainActivity.this.selectedPad = this.index;
@@ -4760,6 +4875,8 @@ public class MainActivity extends Activity {
     @Override // android.app.Activity
     protected void onDestroy() {
         if (MainActivity.globalInstance == this) MainActivity.globalInstance = null;
+        if (fxAdvancedDialog != null) fxAdvancedDialog.dismiss();
+        for (int i = 0; i < PAD_COUNT; i++) stopPadLed(i);
         if (ccKitDebounceRunnable != null) {
             ccKitDebounceHandler.removeCallbacks(ccKitDebounceRunnable);
             ccKitDebounceRunnable = null;

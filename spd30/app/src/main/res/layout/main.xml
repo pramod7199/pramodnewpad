@@ -3,7 +3,7 @@
     android:id="@+id/rootMain"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#ff777a7d"
+    android:background="#ffffffff"
     android:orientation="horizontal"
     android:padding="6dp">
 
@@ -17,59 +17,67 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="42dp"
+            android:layout_height="46dp"
             android:background="@drawable/spd30_bezel"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingLeft="10dp"
-            android:paddingRight="10dp">
+            android:padding="2dp">
 
-            <TextView
-                android:id="@+id/txtBrand"
+            <LinearLayout
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:shadowColor="#66000000"
-                android:shadowDx="2"
-                android:shadowDy="2"
-                android:shadowRadius="2"
-                android:text="PRAMOD OCTAPAD SPD-30"
-                android:textColor="#ff202326"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/txtMidiStatus"
-                android:layout_width="wrap_content"
                 android:layout_height="match_parent"
-                android:gravity="center"
-                android:text="MIDI: disconnected"
-                android:textColor="#ff28613d"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                android:layout_weight="2.2"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:paddingLeft="5dp">
 
-        <LinearLayout
-            android:id="@+id/favDrumRow"
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:layout_marginTop="4dp"
-            android:background="@drawable/spd30_control_panel"
-            android:orientation="horizontal"
-            android:padding="3dp">
+                <TextView
+                    android:id="@+id/txtBrand"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:shadowColor="#66000000"
+                    android:shadowDx="2"
+                    android:shadowDy="2"
+                    android:shadowRadius="2"
+                    android:text="PRAMOD OCTAPAD SPD-30"
+                    android:textColor="#ff202326"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
 
-            <Button android:id="@+id/favDrum1" style="@style/SpdFavoriteButton" android:text="FAV 1" />
-            <Button android:id="@+id/favDrum2" style="@style/SpdFavoriteButton" android:text="FAV 2" />
-            <Button android:id="@+id/favDrum3" style="@style/SpdFavoriteButton" android:text="FAV 3" />
-            <Button android:id="@+id/favDrum4" style="@style/SpdFavoriteButton" android:text="FAV 4" />
-            <Button android:id="@+id/favDrum5" style="@style/SpdFavoriteButton" android:text="FAV 5" />
-            <Button android:id="@+id/favDrum6" style="@style/SpdFavoriteButton" android:text="FAV 6" />
-            <Button android:id="@+id/favDrum7" style="@style/SpdFavoriteButton" android:text="FAV 7" />
-            <Button android:id="@+id/favDrum8" style="@style/SpdFavoriteButton" android:text="FAV 8" />
-            <Button android:id="@+id/favDrum9" style="@style/SpdFavoriteButton" android:text="FAV 9" />
-            <Button android:id="@+id/favDrum10" style="@style/SpdFavoriteButton" android:text="FAV 10" />
+                <TextView
+                    android:id="@+id/txtMidiStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="MIDI: disconnected"
+                    android:textColor="#ff28613d"
+                    android:textSize="8sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/favDrumRow"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="9.8"
+                android:background="@drawable/spd30_control_panel"
+                android:orientation="horizontal"
+                android:padding="2dp">
+
+                <Button android:id="@+id/favDrum1" style="@style/SpdFavoriteButton" android:text="FAV 1" />
+                <Button android:id="@+id/favDrum2" style="@style/SpdFavoriteButton" android:text="FAV 2" />
+                <Button android:id="@+id/favDrum3" style="@style/SpdFavoriteButton" android:text="FAV 3" />
+                <Button android:id="@+id/favDrum4" style="@style/SpdFavoriteButton" android:text="FAV 4" />
+                <Button android:id="@+id/favDrum5" style="@style/SpdFavoriteButton" android:text="FAV 5" />
+                <Button android:id="@+id/favDrum6" style="@style/SpdFavoriteButton" android:text="FAV 6" />
+                <Button android:id="@+id/favDrum7" style="@style/SpdFavoriteButton" android:text="FAV 7" />
+                <Button android:id="@+id/favDrum8" style="@style/SpdFavoriteButton" android:text="FAV 8" />
+                <Button android:id="@+id/favDrum9" style="@style/SpdFavoriteButton" android:text="FAV 9" />
+                <Button android:id="@+id/favDrum10" style="@style/SpdFavoriteButton" android:text="FAV 10" />
+            </LinearLayout>
         </LinearLayout>
 
         <LinearLayout
@@ -78,9 +86,28 @@
             android:layout_height="0dp"
             android:layout_marginTop="5dp"
             android:layout_weight="1"
-            android:background="#ffb5b7b9"
+            android:background="#fff5f5f5"
             android:orientation="vertical"
-            android:padding="4dp">
+            android:padding="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:orientation="horizontal">
+
+                <FrameLayout style="@style/SpdPadLedCell">
+                    <View android:id="@+id/padLed1" style="@style/SpdPadLed" />
+                </FrameLayout>
+                <FrameLayout style="@style/SpdPadLedCell">
+                    <View android:id="@+id/padLed2" style="@style/SpdPadLed" />
+                </FrameLayout>
+                <FrameLayout style="@style/SpdPadLedCell">
+                    <View android:id="@+id/padLed3" style="@style/SpdPadLed" />
+                </FrameLayout>
+                <FrameLayout style="@style/SpdPadLedCell">
+                    <View android:id="@+id/padLed4" style="@style/SpdPadLed" />
+                </FrameLayout>
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -92,7 +119,7 @@
                     android:id="@+id/pad1"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_margin="5dp"
+                    android:layout_margin="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/pad_black_selector"
                     android:text="PAD 1"
@@ -104,7 +131,7 @@
                     android:id="@+id/pad2"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_margin="5dp"
+                    android:layout_margin="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/pad_black_selector"
                     android:text="PAD 2"
@@ -116,7 +143,7 @@
                     android:id="@+id/pad3"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_margin="5dp"
+                    android:layout_margin="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/pad_black_selector"
                     android:text="PAD 3"
@@ -128,7 +155,7 @@
                     android:id="@+id/pad4"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_margin="5dp"
+                    android:layout_margin="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/pad_black_selector"
                     android:text="PAD 4"
@@ -147,7 +174,7 @@
                     android:id="@+id/pad5"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_margin="5dp"
+                    android:layout_margin="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/pad_black_selector"
                     android:text="PAD 5"
@@ -159,7 +186,7 @@
                     android:id="@+id/pad6"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_margin="5dp"
+                    android:layout_margin="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/pad_black_selector"
                     android:text="PAD 6"
@@ -171,7 +198,7 @@
                     android:id="@+id/pad7"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_margin="5dp"
+                    android:layout_margin="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/pad_black_selector"
                     android:text="PAD 7"
@@ -183,13 +210,32 @@
                     android:id="@+id/pad8"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
-                    android:layout_margin="5dp"
+                    android:layout_margin="2dp"
                     android:layout_weight="1"
                     android:background="@drawable/pad_black_selector"
                     android:text="PAD 8"
                     android:textColor="#ffffffff"
                     android:textSize="20sp"
                     android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:orientation="horizontal">
+
+                <FrameLayout style="@style/SpdPadLedCell">
+                    <View android:id="@+id/padLed5" style="@style/SpdPadLed" />
+                </FrameLayout>
+                <FrameLayout style="@style/SpdPadLedCell">
+                    <View android:id="@+id/padLed6" style="@style/SpdPadLed" />
+                </FrameLayout>
+                <FrameLayout style="@style/SpdPadLedCell">
+                    <View android:id="@+id/padLed7" style="@style/SpdPadLed" />
+                </FrameLayout>
+                <FrameLayout style="@style/SpdPadLedCell">
+                    <View android:id="@+id/padLed8" style="@style/SpdPadLed" />
+                </FrameLayout>
             </LinearLayout>
         </LinearLayout>
 

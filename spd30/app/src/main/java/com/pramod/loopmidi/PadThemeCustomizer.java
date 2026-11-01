@@ -974,6 +974,7 @@ final class PadThemeCustomizer {
 
     private int presetRootColor(int preset) {
         switch (preset) {
+            case 0: return Color.WHITE;
             case 1: return 0xFF050C14;
             case 2: return 0xFF180707;
             case 3: return 0xFFE9EDF2;
