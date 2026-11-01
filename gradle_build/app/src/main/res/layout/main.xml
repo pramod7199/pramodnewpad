@@ -11,11 +11,11 @@
         <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/btnPadEdit" android:background="@drawable/toggle_pro_off" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="PAD EDIT" android:layout_weight="1.2"/>
         <LinearLayout android:gravity="center" android:orientation="vertical" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="4dp" android:layout_weight="2.2">
             <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="VOL"/>
-            <SeekBar android:id="@+id/seekVolume" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100"/>
+            <SeekBar android:id="@+id/seekVolume" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progressTint="#FF48A9C5" android:progressBackgroundTint="#FF263847" android:thumbTint="#FF83F4FF"/>
         </LinearLayout>
         <LinearLayout android:gravity="center" android:orientation="vertical" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="4dp" android:layout_weight="2.2">
             <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PITCH"/>
-            <SeekBar android:id="@+id/seekPitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="150"/>
+            <SeekBar android:id="@+id/seekPitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="150" android:progressTint="#FF48A9C5" android:progressBackgroundTint="#FF263847" android:thumbTint="#FF83F4FF"/>
         </LinearLayout>
         <Button android:textSize="12sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/btnSaveKit" android:background="@drawable/toggle_pro_off" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="4dp" android:text="SAVE" android:layout_weight="1.2"/>
         <Button android:textSize="12sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/btnLoadKit" android:background="@drawable/toggle_pro_off" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="LOAD" android:layout_weight="1.2"/>
