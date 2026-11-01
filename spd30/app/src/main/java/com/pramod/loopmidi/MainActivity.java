@@ -99,6 +99,7 @@ public class MainActivity extends Activity {
     private CheckBox chkDelay;
     private View fxControlBar;
     private AlertDialog fxAdvancedDialog;
+    private boolean topPanelCollapsed;
     private volatile boolean isVisible;
     // Velocity Sensitivity: when ON, MIDI velocity (0-127) scales the hit volume
     private boolean velocitySensitiveMode = false;
@@ -1591,6 +1592,7 @@ public class MainActivity extends Activity {
         MainActivity.globalInstance = this;   // cross-activity kit sync ke liye
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+        setupTopPanelSwipe();
         hideSystemUI();
         Toast.makeText(this, "Mobile Octapad Pramod Sahu", 0).show();
         initPresets();
@@ -1946,6 +1948,8 @@ public class MainActivity extends Activity {
                 .setView(scroll)
                 .setPositiveButton("CLOSE", (closedDialog, which) -> closedDialog.dismiss())
                 .create();
+        dialog.setCancelable(false);
+        dialog.setCanceledOnTouchOutside(false);
         dialog.setOnDismissListener(dismissedDialog -> {
             fxSection.removeView(fxControlBar);
             advancedSection.removeView(advControlBar);
@@ -1969,12 +1973,63 @@ public class MainActivity extends Activity {
         setToggleStyle(btnEq, R.drawable.toggle_pro_on);
         dialog.show();
         if (dialog.getWindow() != null) {
+            dialog.getWindow().addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                            | android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
             int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.60f);
             int height = (int) (getResources().getDisplayMetrics().heightPixels * 0.94f);
             dialog.getWindow().setBackgroundDrawableResource(R.drawable.spd30_bezel);
             dialog.getWindow().setLayout(width, height);
             dialog.getWindow().setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
             dialog.getWindow().setDimAmount(0f);
+        }
+    }
+
+    private void setupTopPanelSwipe() {
+        View topPanelContent = findViewById(R.id.topBankContent);
+        TextView indicator = findViewById(R.id.topPanelSwipeIndicator);
+        View handle = findViewById(R.id.topPanelSwipeHandle);
+        final float[] touchStartY = new float[1];
+        handle.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    touchStartY[0] = event.getRawY();
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    float distance = event.getRawY() - touchStartY[0];
+                    if (distance < -dp(24)) {
+                        setTopPanelCollapsed(true, topPanelContent, indicator);
+                    } else if (distance > dp(24)) {
+                        setTopPanelCollapsed(false, topPanelContent, indicator);
+                    } else {
+                        setTopPanelCollapsed(!topPanelCollapsed, topPanelContent, indicator);
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+                default:
+                    return true;
+            }
+        });
+    }
+
+    private void setTopPanelCollapsed(boolean collapsed, View content, TextView indicator) {
+        if (topPanelCollapsed == collapsed) return;
+        content.animate().cancel();
+        topPanelCollapsed = collapsed;
+        indicator.setText(collapsed ? "▼" : "▲");
+        if (collapsed) {
+            content.animate().translationY(-content.getHeight()).alpha(0f).setDuration(150)
+                    .withEndAction(() -> {
+                        if (!topPanelCollapsed) return;
+                        content.setVisibility(View.GONE);
+                        content.setTranslationY(0f);
+                    }).start();
+        } else {
+            content.setVisibility(View.VISIBLE);
+            content.setTranslationY(-content.getHeight());
+            content.setAlpha(0f);
+            content.animate().translationY(0f).alpha(1f).setDuration(150).start();
         }
     }
 
@@ -4728,7 +4783,7 @@ public class MainActivity extends Activity {
             Toast.LENGTH_SHORT).show();
     }
 
-    /** Reflect a slot's fill-state on its button (filled = orange, empty = dark). */
+    /** Reflect a slot's saved state while keeping all favorite bank buttons red. */
     public void updateFavoriteButton(int slot) {
         Button b = (slot >= 0 && slot < favDrumButtons.length) ? favDrumButtons[slot] : null;
         if (b != null) {
@@ -4737,8 +4792,8 @@ public class MainActivity extends Activity {
             if (themeCustomizer != null) {
                 themeCustomizer.updateFavoriteButton(slot, filled);
             } else {
-                b.setBackgroundResource(filled
-                        ? R.drawable.btn_3d_orange : R.drawable.btn_3d_dark);
+                b.setBackgroundResource(R.drawable.spd30_key_red);
+                b.setTextColor(0xFFFFFFFF);
             }
         }
     }

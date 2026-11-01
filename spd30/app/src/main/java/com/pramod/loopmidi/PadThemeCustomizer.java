@@ -560,23 +560,8 @@ final class PadThemeCustomizer {
     private void applyFavoriteButton(int index) {
         Button button = favoriteButtons[index];
         if (button == null) return;
-        int preset = preferences.getInt(KEY_PRESET, 0);
-        Drawable style = preset == 0
-                ? activity.getDrawable(favoriteFilled[index]
-                        ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off)
-                : createRaisedButton(preset, favoriteFilled[index], 7, 3, false);
-        Bitmap photo = getTogglePhoto();
-        if (photo != null) {
-            CenterCropDrawable image = new CenterCropDrawable(photo, dp(6));
-            image.setAlpha(72);
-            LayerDrawable combined = new LayerDrawable(new Drawable[]{style, image});
-            combined.setLayerInset(1, dp(1), dp(1), dp(1), dp(4));
-            button.setBackground(combined);
-        } else {
-            button.setBackground(style);
-        }
-        button.setTextColor(preset == 3 || (preset == 0 && !favoriteFilled[index])
-                ? 0xFF202326 : Color.WHITE);
+        button.setBackgroundResource(R.drawable.spd30_key_red);
+        button.setTextColor(Color.WHITE);
     }
 
     private Drawable createRaisedButton(int preset, boolean filled, int radiusDp, int depthDp,
