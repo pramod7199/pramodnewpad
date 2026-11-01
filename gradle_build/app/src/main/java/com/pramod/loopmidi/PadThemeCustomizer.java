@@ -455,7 +455,7 @@ final class PadThemeCustomizer {
             image.setFilterBitmap(true);
             image.setDither(true);
             image.setAlpha(preferences.getInt(KEY_PAD_OPACITY + padIndex, 70) * 255 / 100);
-            int borderColor = getPadOutlineColor(padIndex);
+            int borderColor = getPadImageOutlineColor(padIndex);
             Drawable border = createPadBorder(borderColor);
             pads[padIndex].setBackground(borderColor == 0
                     ? new LayerDrawable(new Drawable[]{base, image})
@@ -984,13 +984,14 @@ final class PadThemeCustomizer {
     }
 
     private Drawable addPadBorder(int padIndex, Drawable base) {
-        int color = getPadOutlineColor(padIndex);
+        int color = getBorderColor(padIndex);
         if (color == 0) return base;
         return new LayerDrawable(new Drawable[]{base, createPadBorder(color)});
     }
 
-    private int getPadOutlineColor(int padIndex) {
-        return getBorderColor(padIndex);
+    private int getPadImageOutlineColor(int padIndex) {
+        int color = getBorderColor(padIndex);
+        return color == 0 ? padSelectorColors(preferences.getInt(KEY_PRESET, 0))[7] : color;
     }
 
     private Drawable createPadBorder(int color) {
