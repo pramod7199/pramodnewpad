@@ -75,7 +75,6 @@ final class PadThemeCustomizer {
     private final Activity activity;
     private final SharedPreferences preferences;
     private final Button[] pads;
-    private final Drawable[] basePadBackgrounds;
     private final View root;
     private final View[] backgroundSurfaces;
     private final Drawable[] baseSurfaceBackgrounds;
@@ -94,10 +93,6 @@ final class PadThemeCustomizer {
         this.preferences = preferences;
         this.pads = pads;
         this.root = root;
-        this.basePadBackgrounds = new Drawable[pads.length];
-        for (int i = 0; i < pads.length; i++) {
-            basePadBackgrounds[i] = pads[i].getBackground();
-        }
         int[] surfaceIds = {R.id.topControlBar, R.id.fxControlBar, R.id.advControlBar,
                 R.id.favDrumRow, R.id.titleBar, R.id.padArea};
         backgroundSurfaces = new View[surfaceIds.length];
@@ -448,7 +443,7 @@ final class PadThemeCustomizer {
     private void applyPadImage(int padIndex) {
         pads[padIndex].setTextColor(preferences.getInt(KEY_PRESET, 0) == 3
                 ? 0xFF172033 : Color.WHITE);
-        Drawable base = createPadBase(padIndex);
+        Drawable base = createPadBase();
         String uriText = preferences.getString(KEY_PAD_IMAGE + padIndex, null);
         if (uriText == null) {
             pads[padIndex].setBackground(addPadBorder(padIndex, base));
@@ -468,7 +463,7 @@ final class PadThemeCustomizer {
         } catch (Exception error) {
             Log.e(TAG, "Could not load pad theme image for pad " + (padIndex + 1), error);
             preferences.edit().remove(KEY_PAD_IMAGE + padIndex).apply();
-            pads[padIndex].setBackground(addPadBorder(padIndex, createPadBase(padIndex)));
+            pads[padIndex].setBackground(addPadBorder(padIndex, createPadBase()));
             Toast.makeText(activity, "Saved image for PAD " + (padIndex + 1)
                     + " is unavailable", Toast.LENGTH_LONG).show();
         }
@@ -661,12 +656,73 @@ final class PadThemeCustomizer {
                 Math.min(255, Color.blue(color) + 32));
     }
 
-    private Drawable createThemePadBase(int preset) {
+    private Drawable createPadSelector(int preset) {
         StateListDrawable states = new StateListDrawable();
-        states.addState(new int[]{android.R.attr.state_pressed},
-                createRaisedButton(preset, false, 18, 7, true));
-        states.addState(new int[0], createRaisedButton(preset, false, 18, 7, false));
+        states.addState(new int[]{android.R.attr.state_pressed}, createPadSelectorState(preset, true));
+        states.addState(new int[0], createPadSelectorState(preset, false));
         return states;
+    }
+
+    private Drawable createPadSelectorState(int preset, boolean pressed) {
+        int[] colors = padSelectorColors(preset);
+        LayerDrawable layers;
+        if (pressed) {
+            layers = new LayerDrawable(new Drawable[]{createPadSurface(
+                    colors[0], colors[1], colors[2], colors[3], true)});
+            layers.setLayerInset(0, dp(4), dp(4), 0, 0);
+            return layers;
+        }
+
+        GradientDrawable shadow = new GradientDrawable();
+        shadow.setShape(GradientDrawable.RECTANGLE);
+        shadow.setCornerRadius(dp(18));
+        shadow.setColor(0x99000000);
+        Drawable face = createPadSurface(colors[4], colors[5], colors[6], colors[7], false);
+        GradientDrawable gloss = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x77FFFFFF, 0x00FFFFFF});
+        gloss.setShape(GradientDrawable.RECTANGLE);
+        gloss.setCornerRadius(dp(18));
+        GradientDrawable shade = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x00000000, 0xAA000000});
+        shade.setShape(GradientDrawable.RECTANGLE);
+        shade.setCornerRadius(dp(18));
+        layers = new LayerDrawable(new Drawable[]{shadow, face, gloss, shade});
+        layers.setLayerInset(0, dp(6), dp(6), 0, 0);
+        for (int i = 1; i < layers.getNumberOfLayers(); i++) {
+            layers.setLayerInset(i, 0, 0, dp(4), dp(4));
+        }
+        return layers;
+    }
+
+    private Drawable createPadSurface(int topColor, int middleColor, int bottomColor,
+                                      int borderColor, boolean pressed) {
+        GradientDrawable surface = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{topColor, middleColor, bottomColor});
+        surface.setShape(GradientDrawable.RECTANGLE);
+        surface.setCornerRadius(dp(18));
+        surface.setStroke(dp(pressed ? 3 : 2), borderColor);
+        surface.setPadding(dp(6), dp(6), dp(6), dp(6));
+        return surface;
+    }
+
+    private int[] padSelectorColors(int preset) {
+        switch (preset) {
+            case 1:
+                return new int[]{0xFF087E91, 0xFF0A6573, 0xFF06424F, 0xFF83F4FF,
+                        0xFF12A3B5, 0xFF1A7B89, 0xFF075260, 0xFF72EAF4};
+            case 2:
+                return new int[]{0xFFB63B45, 0xFF85262F, 0xFF4A1118, 0xFFFF858A,
+                        0xFF8F2B34, 0xFF681D25, 0xFF3A1111, 0xFFFF626B};
+            case 3:
+                return new int[]{0xFFDCEBFA, 0xFFB8D0EA, 0xFF829BB8, 0xFF164F8D,
+                        0xFFEAF3FF, 0xFFB8D0EA, 0xFF829BB8, 0xFF2266AA};
+            case 4:
+                return new int[]{0xFF8655AC, 0xFF5C397A, 0xFF332047, 0xFFE3B4FF,
+                        0xFF67438A, 0xFF4B3067, 0xFF2C1B3E, 0xFFD58BFF};
+            default:
+                return new int[]{0xFF222222, 0xFF111111, 0xFF000000, 0xFF00AFFF,
+                        0xFF444444, 0xFF1A1A1A, 0xFF000000, 0xFF808080};
+        }
     }
 
     private static final class CenterCropDrawable extends Drawable {
@@ -922,10 +978,9 @@ final class PadThemeCustomizer {
         }
     }
 
-    private Drawable createPadBase(int padIndex) {
+    private Drawable createPadBase() {
         int preset = preferences.getInt(KEY_PRESET, 0);
-        if (preset == 0) return cloneDrawable(basePadBackgrounds[padIndex]);
-        return createThemePadBase(preset);
+        return createPadSelector(preset);
     }
 
     private Drawable addPadBorder(int padIndex, Drawable base) {
@@ -935,10 +990,7 @@ final class PadThemeCustomizer {
     }
 
     private int getPadOutlineColor(int padIndex) {
-        int color = getBorderColor(padIndex);
-        if (color != 0) return color;
-        int preset = preferences.getInt(KEY_PRESET, 0);
-        return preset == 0 ? 0 : presetAccent(preset, false);
+        return getBorderColor(padIndex);
     }
 
     private Drawable createPadBorder(int color) {
