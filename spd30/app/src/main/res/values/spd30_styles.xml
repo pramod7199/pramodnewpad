@@ -31,14 +31,34 @@
 
     <style name="SpdPadLedCell">
         <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">8dp</item>
+        <item name="android:layout_height">10dp</item>
         <item name="android:layout_weight">1</item>
     </style>
 
     <style name="SpdPadLed">
-        <item name="android:layout_width">8dp</item>
-        <item name="android:layout_height">8dp</item>
+        <item name="android:layout_width">22dp</item>
+        <item name="android:layout_height">6dp</item>
         <item name="android:layout_gravity">center</item>
         <item name="android:background">@drawable/spd30_led_off</item>
+    </style>
+
+    <style name="SpdSlider">
+        <item name="android:layout_height">26dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+        <item name="android:progressBackgroundTint">#ff55595c</item>
+        <item name="android:progressTint">#ff6ca6c2</item>
+        <item name="android:thumbTint">#ffdae8ee</item>
+    </style>
+
+    <style name="SpdSliderLabel">
+        <item name="android:layout_width">96dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textColor">#ffffffff</item>
+        <item name="android:textSize">10sp</item>
     </style>
 </resources>

@@ -8,6 +8,7 @@
     android:padding="6dp">
 
     <LinearLayout
+        android:id="@+id/padMainPanel"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:background="@drawable/spd30_bezel"
@@ -18,7 +19,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="46dp"
-            android:background="@drawable/spd30_bezel"
+            android:background="@drawable/spd30_control_panel"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:padding="2dp">
@@ -42,7 +43,7 @@
                     android:shadowDy="2"
                     android:shadowRadius="2"
                     android:text="PRAMOD OCTAPAD SPD-30"
-                    android:textColor="#ff202326"
+                    android:textColor="#ffffffff"
                     android:textSize="11sp"
                     android:textStyle="bold" />
 
@@ -92,7 +93,7 @@
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="8dp"
+                android:layout_height="10dp"
                 android:orientation="horizontal">
 
                 <FrameLayout style="@style/SpdPadLedCell">
@@ -221,7 +222,7 @@
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="8dp"
+                android:layout_height="10dp"
                 android:orientation="horizontal">
 
                 <FrameLayout style="@style/SpdPadLedCell">
@@ -242,6 +243,7 @@
     </LinearLayout>
 
     <ScrollView
+        android:id="@+id/controlPanelScroll"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
@@ -318,6 +320,59 @@
                     android:textColor="#ff102c3b"
                     android:textSize="20sp"
                     android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="30dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="68dp"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:text="PAD VOL"
+                        android:textColor="#ffffffff"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
+                    <SeekBar
+                        android:id="@+id/seekVolume"
+                        style="@style/SpdSlider"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:max="100" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="30dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="68dp"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:text="PAD PITCH"
+                        android:textColor="#ffffffff"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
+                    <SeekBar
+                        android:id="@+id/seekPitch"
+                        style="@style/SpdSlider"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:max="150" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -399,61 +454,6 @@
                 android:layout_width="match_parent"
                 android:text="MIDI CC CONTROL" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:padding="4dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="VOLUME"
-                        android:textColor="#ffffffff"
-                        android:textSize="9sp" />
-
-                    <SeekBar
-                        android:id="@+id/seekVolume"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:max="100"
-                        android:progressBackgroundTint="#ff55595c"
-                        android:progressTint="#ff6ca6c2"
-                        android:thumbTint="#ffdae8ee" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:padding="4dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="PITCH"
-                        android:textColor="#ffffffff"
-                        android:textSize="9sp" />
-
-                    <SeekBar
-                        android:id="@+id/seekPitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:max="150"
-                        android:progressBackgroundTint="#ff55595c"
-                        android:progressTint="#ff6ca6c2"
-                        android:thumbTint="#ffdae8ee" />
-                </LinearLayout>
-            </LinearLayout>
-
             <TextView
                 android:id="@+id/txtSignedInAs"
                 android:layout_width="match_parent"
@@ -488,14 +488,37 @@
                     android:id="@+id/chkDelay"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="DELAY"
-                    android:textColor="#ff00ffff" />
+                    android:buttonTint="#ffdf424a"
+                    android:text="Delay effect (on/off)"
+                    android:textColor="#ffffffff"
+                    android:textSize="12sp" />
 
-                <SeekBar android:id="@+id/seekDelayTime" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500" />
-                <SeekBar android:id="@+id/seekDelayLevel" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-                <SeekBar android:id="@+id/seekEqHigh" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" />
-                <SeekBar android:id="@+id/seekEqMid" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" />
-                <SeekBar android:id="@+id/seekEqLow" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView style="@style/SpdSliderLabel" android:text="Delay time (ms)" />
+                        <SeekBar android:id="@+id/seekDelayTime" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="500" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView style="@style/SpdSliderLabel" android:text="Delay level" />
+                        <SeekBar android:id="@+id/seekDelayLevel" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="100" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView style="@style/SpdSliderLabel" android:text="EQ high" />
+                        <SeekBar android:id="@+id/seekEqHigh" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="200" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView style="@style/SpdSliderLabel" android:text="EQ mid" />
+                        <SeekBar android:id="@+id/seekEqMid" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="200" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                        <TextView style="@style/SpdSliderLabel" android:text="EQ low" />
+                        <SeekBar android:id="@+id/seekEqLow" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="200" />
+                    </LinearLayout>
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -505,12 +528,27 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <SeekBar android:id="@+id/seekAttack" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500" />
-                <SeekBar android:id="@+id/seekRelease" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500" />
-                <SeekBar android:id="@+id/seekChokeGroup" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="4" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView style="@style/SpdSliderLabel" android:text="Attack (ms)" />
+                    <SeekBar android:id="@+id/seekAttack" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="500" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView style="@style/SpdSliderLabel" android:text="Release (ms)" />
+                    <SeekBar android:id="@+id/seekRelease" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="500" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView style="@style/SpdSliderLabel" android:text="Choke group" />
+                    <SeekBar android:id="@+id/seekChokeGroup" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="4" />
+                </LinearLayout>
                 <Button android:id="@+id/btnPadColor" style="@style/SpdControlButton" android:layout_width="match_parent" android:text="PAD COLOR" />
-                <SeekBar android:id="@+id/seekMasterVolume" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
-                <SeekBar android:id="@+id/seekMasterPitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView style="@style/SpdSliderLabel" android:text="Master volume" />
+                    <SeekBar android:id="@+id/seekMasterVolume" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="100" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="32dp" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView style="@style/SpdSliderLabel" android:text="Master pitch" />
+                    <SeekBar android:id="@+id/seekMasterPitch" style="@style/SpdSlider" android:layout_width="0dp" android:layout_weight="1" android:max="200" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

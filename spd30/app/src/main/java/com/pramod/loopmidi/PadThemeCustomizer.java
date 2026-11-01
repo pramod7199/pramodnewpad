@@ -525,7 +525,13 @@ final class PadThemeCustomizer {
         int preset = preferences.getInt(KEY_PRESET, 0);
         boolean navigationKey = button.getId() == R.id.btnPrevKit
                 || button.getId() == R.id.btnNextKit;
-        Drawable style = preset == 0
+        boolean bankSelector = button.getId() == R.id.btnBankA
+                || button.getId() == R.id.btnBankB
+                || button.getId() == R.id.btnBankAB;
+        Drawable style = bankSelector
+                ? activity.getDrawable(isOn
+                        ? R.drawable.spd30_key_red : R.drawable.spd30_key_gray)
+                : preset == 0
                 ? activity.getDrawable(navigationKey ? R.drawable.spd30_key_red
                         : isOn ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off)
                 : createRaisedButton(preset, isOn, 10, 3, false);
@@ -539,8 +545,10 @@ final class PadThemeCustomizer {
             combined.setLayerInset(1, dp(1), dp(1), dp(1), dp(4));
             button.setBackground(combined);
         }
-        button.setTextColor(preset == 3 || (preset == 0 && !isOn && !navigationKey)
-                ? 0xFF202326 : Color.WHITE);
+        button.setTextColor(bankSelector
+                ? (isOn ? Color.WHITE : 0xFF202326)
+                : preset == 3 || (preset == 0 && !isOn && !navigationKey)
+                        ? 0xFF202326 : Color.WHITE);
     }
 
     private void applyFavoriteButtons() {

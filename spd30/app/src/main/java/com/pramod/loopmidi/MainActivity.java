@@ -2,7 +2,6 @@ package com.pramod.loopmidi;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.animation.ValueAnimator;
 import android.content.DialogInterface;
 import android.media.AudioManager;
 import android.text.InputType;
@@ -77,7 +76,6 @@ public class MainActivity extends Activity {
 
     private View advControlBar;
     private final View[] padLedIndicators = new View[PAD_COUNT];
-    private final ValueAnimator[] padLedAnimations = new ValueAnimator[PAD_COUNT];
     private AudioEngine.SampleData assistSoundId;
     private Uri assistSoundUri;
     private AudioEngine audioEngine;
@@ -1889,13 +1887,29 @@ public class MainActivity extends Activity {
 
     private void showFxAdvancedDialog() {
         if (fxAdvancedDialog != null && fxAdvancedDialog.isShowing()) return;
+        View padPanel = findViewById(R.id.padMainPanel);
+        ScrollView rightPanel = findViewById(R.id.controlPanelScroll);
         if (fxControlBar == null || advControlBar == null
+                || padPanel == null || rightPanel == null
                 || !(fxControlBar.getParent() instanceof ViewGroup)
-                || fxControlBar.getParent() != advControlBar.getParent()) {
+                || fxControlBar.getParent() != advControlBar.getParent()
+                || !(padPanel.getLayoutParams() instanceof LinearLayout.LayoutParams)
+                || !(rightPanel.getLayoutParams() instanceof LinearLayout.LayoutParams)) {
             Log.e(TAG, "FX/advanced controls are not attached to the expected settings panel");
             Toast.makeText(this, "FX settings are unavailable", Toast.LENGTH_LONG).show();
             return;
         }
+
+        LinearLayout.LayoutParams padPanelParams =
+                (LinearLayout.LayoutParams) padPanel.getLayoutParams();
+        LinearLayout.LayoutParams rightPanelParams =
+                (LinearLayout.LayoutParams) rightPanel.getLayoutParams();
+        float originalPadWeight = padPanelParams.weight;
+        float originalRightWeight = rightPanelParams.weight;
+        padPanelParams.weight = 2f;
+        rightPanelParams.weight = 3f;
+        padPanel.setLayoutParams(padPanelParams);
+        rightPanel.setLayoutParams(rightPanelParams);
 
         ViewGroup originalParent = (ViewGroup) fxControlBar.getParent();
         int fxOriginalIndex = originalParent.indexOfChild(fxControlBar);
@@ -1944,6 +1958,10 @@ public class MainActivity extends Activity {
             }
             fxControlBar.setVisibility(fxOriginalVisibility);
             advControlBar.setVisibility(advOriginalVisibility);
+            padPanelParams.weight = originalPadWeight;
+            rightPanelParams.weight = originalRightWeight;
+            padPanel.setLayoutParams(padPanelParams);
+            rightPanel.setLayoutParams(rightPanelParams);
             fxAdvancedDialog = null;
             setToggleStyle(btnEq, R.drawable.toggle_pro_off);
         });
@@ -1951,11 +1969,12 @@ public class MainActivity extends Activity {
         setToggleStyle(btnEq, R.drawable.toggle_pro_on);
         dialog.show();
         if (dialog.getWindow() != null) {
-            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.86f);
-            int height = (int) (getResources().getDisplayMetrics().heightPixels * 0.84f);
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.60f);
+            int height = (int) (getResources().getDisplayMetrics().heightPixels * 0.94f);
             dialog.getWindow().setBackgroundDrawableResource(R.drawable.spd30_bezel);
             dialog.getWindow().setLayout(width, height);
-            dialog.getWindow().setGravity(Gravity.CENTER);
+            dialog.getWindow().setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+            dialog.getWindow().setDimAmount(0f);
         }
     }
 
@@ -2021,26 +2040,13 @@ public class MainActivity extends Activity {
     }
 
     private void startPadLed(int padIndex) {
-        stopPadLed(padIndex);
         View led = padLedIndicators[padIndex];
         if (led == null) return;
         led.setBackgroundResource(R.drawable.spd30_led_on);
-        ValueAnimator animation = ValueAnimator.ofFloat(1f, 0.2f);
-        animation.setDuration(110);
-        animation.setRepeatMode(ValueAnimator.REVERSE);
-        animation.setRepeatCount(ValueAnimator.INFINITE);
-        animation.addUpdateListener(value ->
-                led.setAlpha((Float) value.getAnimatedValue()));
-        padLedAnimations[padIndex] = animation;
-        animation.start();
+        led.setAlpha(1f);
     }
 
     private void stopPadLed(int padIndex) {
-        ValueAnimator animation = padLedAnimations[padIndex];
-        if (animation != null) {
-            animation.cancel();
-            padLedAnimations[padIndex] = null;
-        }
         View led = padLedIndicators[padIndex];
         if (led != null) {
             led.setAlpha(1f);
