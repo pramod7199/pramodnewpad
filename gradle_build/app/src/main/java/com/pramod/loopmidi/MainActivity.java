@@ -4466,7 +4466,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Find + wire the 10 favorite buttons. Tap = load, long-press = save. */
+    /** Find + wire the 10 favorite buttons. Tap = load, long-press = save or clear. */
     private void setupFavorites() {
         int[] ids = {R.id.favDrum1, R.id.favDrum2, R.id.favDrum3, R.id.favDrum4,
                      R.id.favDrum5, R.id.favDrum6, R.id.favDrum7, R.id.favDrum8,
@@ -4493,9 +4493,23 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Save the CURRENT kit setup (Bank A + B + mode) into favorite slot. */
+    /** Long-press toggles a favorite slot between saved and empty. */
     public void saveFavorite(int slot) {
         if (slot < 0 || slot >= 10) return;
+        if (favKitA[slot] >= 1) {
+            favKitA[slot] = 0;
+            favKitB[slot] = 0;
+            favBank[slot] = 0;
+            prefs.edit()
+                    .remove(PREF_FAV_KIT_A + slot)
+                    .remove(PREF_FAV_KIT_B + slot)
+                    .remove(PREF_FAV_BANK_MODE + slot)
+                    .apply();
+            updateFavoriteButton(slot);
+            Toast.makeText(this, "Favorite " + (slot + 1) + " cleared",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
         // Flush current edits into the kit's persistent storage first
         saveKitToMemory(kitIndex);
         favKitA[slot] = kitIndex;

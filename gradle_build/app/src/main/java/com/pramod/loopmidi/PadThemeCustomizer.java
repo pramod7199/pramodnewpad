@@ -555,7 +555,10 @@ final class PadThemeCustomizer {
         Button button = favoriteButtons[index];
         if (button == null) return;
         int preset = preferences.getInt(KEY_PRESET, 0);
-        Drawable style = createRaisedButton(preset, favoriteFilled[index], 7, 3, false);
+        Drawable style = preset == 0
+                ? activity.getDrawable(favoriteFilled[index]
+                        ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off)
+                : createRaisedButton(preset, favoriteFilled[index], 7, 3, false);
         Bitmap photo = getTogglePhoto();
         if (photo != null) {
             CenterCropDrawable image = new CenterCropDrawable(photo, dp(6));
