@@ -4484,6 +4484,13 @@ public class MainActivity extends Activity {
         }
         loadFavorites();
         for (int i = 0; i < 10; i++) updateFavoriteButton(i);
+        boolean[] filledSlots = new boolean[favDrumButtons.length];
+        for (int i = 0; i < filledSlots.length; i++) {
+            filledSlots[i] = favKitA[i] >= 1;
+        }
+        if (themeCustomizer != null) {
+            themeCustomizer.setFavoriteButtons(favDrumButtons, filledSlots);
+        }
     }
 
     /** Save the CURRENT kit setup (Bank A + B + mode) into favorite slot. */
@@ -4533,7 +4540,12 @@ public class MainActivity extends Activity {
         if (b != null) {
             boolean filled = favKitA[slot] >= 1;
             b.setText(filled ? "⭐" + (slot + 1) : "·" + (slot + 1));
-            b.setBackgroundResource(filled ? R.drawable.btn_3d_orange : R.drawable.btn_3d_dark);
+            if (themeCustomizer != null) {
+                themeCustomizer.updateFavoriteButton(slot, filled);
+            } else {
+                b.setBackgroundResource(filled
+                        ? R.drawable.btn_3d_orange : R.drawable.btn_3d_dark);
+            }
         }
     }
 

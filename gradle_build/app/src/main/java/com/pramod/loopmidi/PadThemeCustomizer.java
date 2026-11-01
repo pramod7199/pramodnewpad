@@ -5,15 +5,24 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.res.ColorStateList;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PixelFormat;
+import android.graphics.RectF;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.util.Log;
 import android.view.View;
@@ -69,6 +78,8 @@ final class PadThemeCustomizer {
     private final View[] backgroundSurfaces;
     private final Drawable[] baseSurfaceBackgrounds;
     private final Button[] toggleButtons;
+    private Button[] favoriteButtons = new Button[0];
+    private boolean[] favoriteFilled = new boolean[0];
     private Bitmap togglePhoto;
     private String togglePhotoUri;
     private int pickerPadIndex = -1;
@@ -114,6 +125,18 @@ final class PadThemeCustomizer {
         applyGlobalBackground();
         applyPadLabels();
         applyTogglePhoto();
+    }
+
+    void setFavoriteButtons(Button[] buttons, boolean[] filled) {
+        favoriteButtons = buttons == null ? new Button[0] : buttons.clone();
+        favoriteFilled = filled == null ? new boolean[0] : filled.clone();
+        applyFavoriteButtons();
+    }
+
+    void updateFavoriteButton(int index, boolean filled) {
+        if (index < 0 || index >= favoriteButtons.length) return;
+        favoriteFilled[index] = filled;
+        applyFavoriteButton(index);
     }
 
     void showDialog(int initialPadIndex) {
@@ -417,6 +440,8 @@ final class PadThemeCustomizer {
     }
 
     private void applyPadImage(int padIndex) {
+        pads[padIndex].setTextColor(preferences.getInt(KEY_PRESET, 0) == 3
+                ? 0xFF172033 : Color.WHITE);
         Drawable base = createPadBase(padIndex);
         String uriText = preferences.getString(KEY_PAD_IMAGE + padIndex, null);
         if (uriText == null) {
@@ -426,8 +451,10 @@ final class PadThemeCustomizer {
         try {
             Bitmap bitmap = decodeImage(Uri.parse(uriText), 1024);
             BitmapDrawable image = new BitmapDrawable(activity.getResources(), bitmap);
+            image.setFilterBitmap(true);
+            image.setDither(true);
             image.setAlpha(preferences.getInt(KEY_PAD_OPACITY + padIndex, 70) * 255 / 100);
-            int borderColor = getBorderColor(padIndex);
+            int borderColor = getPadOutlineColor(padIndex);
             Drawable border = createPadBorder(borderColor);
             pads[padIndex].setBackground(borderColor == 0
                     ? new LayerDrawable(new Drawable[]{base, image})
@@ -503,6 +530,179 @@ final class PadThemeCustomizer {
                 button.setBackground(new LayerDrawable(
                         new Drawable[]{cloneDrawable(base), image}));
             }
+        }
+        applyFavoriteButtons();
+    }
+
+    private void applyFavoriteButtons() {
+        for (int i = 0; i < favoriteButtons.length; i++) {
+            applyFavoriteButton(i);
+        }
+    }
+
+    private void applyFavoriteButton(int index) {
+        Button button = favoriteButtons[index];
+        if (button == null) return;
+        int preset = preferences.getInt(KEY_PRESET, 0);
+        Drawable style = createRaisedButton(preset, favoriteFilled[index], 7, 3, false);
+        Bitmap photo = getTogglePhoto();
+        if (photo != null) {
+            CenterCropDrawable image = new CenterCropDrawable(photo, dp(6));
+            image.setAlpha(72);
+            LayerDrawable combined = new LayerDrawable(new Drawable[]{style, image});
+            combined.setLayerInset(1, dp(1), dp(1), dp(1), dp(4));
+            button.setBackground(combined);
+        } else {
+            button.setBackground(style);
+        }
+        button.setTextColor(preset == 3 ? 0xFF172033 : Color.WHITE);
+    }
+
+    private Drawable createRaisedButton(int preset, boolean filled, int radiusDp, int depthDp,
+                                        boolean pressed) {
+        int accent = presetAccent(preset, filled);
+        int top = presetTopColor(preset, filled);
+        int bottom = presetBottomColor(preset, filled);
+        int radius = dp(radiusDp);
+        GradientDrawable shadow = new GradientDrawable();
+        shadow.setShape(GradientDrawable.RECTANGLE);
+        shadow.setCornerRadius(radius);
+        shadow.setColor(presetShadowColor(preset));
+
+        GradientDrawable face = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{pressed ? lighten(top) : top, bottom});
+        face.setShape(GradientDrawable.RECTANGLE);
+        face.setCornerRadius(radius);
+        face.setStroke(dp(pressed ? 3 : 2), accent);
+        LayerDrawable faceLayers = new LayerDrawable(new Drawable[]{face, createGloss(radius)});
+        GradientDrawable mask = new GradientDrawable();
+        mask.setShape(GradientDrawable.RECTANGLE);
+        mask.setCornerRadius(radius);
+        mask.setColor(Color.WHITE);
+        RippleDrawable ripple = new RippleDrawable(
+                ColorStateList.valueOf(withAlpha(accent, 0x70)), faceLayers, mask);
+
+        LayerDrawable raised = new LayerDrawable(new Drawable[]{shadow, ripple});
+        int depth = dp(depthDp);
+        raised.setLayerInset(0, dp(1), pressed ? depth : 0, dp(1), 0);
+        raised.setLayerInset(1, 0, pressed ? depth / 2 : 0, 0, pressed ? 0 : depth);
+        return raised;
+    }
+
+    private Drawable createGloss(int radius) {
+        GradientDrawable gloss = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x40FFFFFF, 0x00FFFFFF});
+        gloss.setShape(GradientDrawable.RECTANGLE);
+        gloss.setCornerRadius(radius);
+        return gloss;
+    }
+
+    private int presetAccent(int preset, boolean filled) {
+        switch (preset) {
+            case 1: return 0xFF00E5FF;
+            case 2: return 0xFFFF5C5C;
+            case 3: return 0xFF1565C0;
+            case 4: return 0xFFD58BFF;
+            default: return filled ? 0xFFFFA64D : 0xFF55D8FF;
+        }
+    }
+
+    private int presetTopColor(int preset, boolean filled) {
+        switch (preset) {
+            case 1: return filled ? 0xFF087F8C : 0xFF104858;
+            case 2: return filled ? 0xFF9B2525 : 0xFF642020;
+            case 3: return filled ? 0xFFD6E8FF : 0xFFF9FBFF;
+            case 4: return filled ? 0xFF7542A0 : 0xFF573777;
+            default: return filled ? 0xFFB96822 : 0xFF484848;
+        }
+    }
+
+    private int presetBottomColor(int preset, boolean filled) {
+        switch (preset) {
+            case 1: return filled ? 0xFF063E4A : 0xFF092632;
+            case 2: return filled ? 0xFF511414 : 0xFF3A1111;
+            case 3: return filled ? 0xFF8FB6E8 : 0xFFCBD5E1;
+            case 4: return filled ? 0xFF38234D : 0xFF2C1B3E;
+            default: return filled ? 0xFF713A12 : 0xFF242424;
+        }
+    }
+
+    private int presetShadowColor(int preset) {
+        switch (preset) {
+            case 1: return 0xFF03161D;
+            case 2: return 0xFF220909;
+            case 3: return 0xFF64748B;
+            case 4: return 0xFF160D21;
+            default: return 0xFF090909;
+        }
+    }
+
+    private int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (alpha << 24);
+    }
+
+    private int lighten(int color) {
+        return Color.rgb(Math.min(255, Color.red(color) + 32),
+                Math.min(255, Color.green(color) + 32),
+                Math.min(255, Color.blue(color) + 32));
+    }
+
+    private Drawable createThemePadBase(int preset) {
+        StateListDrawable states = new StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_pressed},
+                createRaisedButton(preset, false, 18, 7, true));
+        states.addState(new int[0], createRaisedButton(preset, false, 18, 7, false));
+        return states;
+    }
+
+    private static final class CenterCropDrawable extends Drawable {
+        private final Bitmap bitmap;
+        private final float cornerRadius;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG
+                | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        private final RectF destination = new RectF();
+        private final RectF boundsRect = new RectF();
+        private final Path clipPath = new Path();
+
+        CenterCropDrawable(Bitmap bitmap, float cornerRadius) {
+            this.bitmap = bitmap;
+            this.cornerRadius = cornerRadius;
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            android.graphics.Rect bounds = getBounds();
+            if (bounds.isEmpty() || bitmap.isRecycled()) return;
+            boundsRect.set(bounds);
+            float scale = Math.max(boundsRect.width() / bitmap.getWidth(),
+                    boundsRect.height() / bitmap.getHeight());
+            float width = bitmap.getWidth() * scale;
+            float height = bitmap.getHeight() * scale;
+            destination.set(boundsRect.centerX() - width / 2f, boundsRect.centerY() - height / 2f,
+                    boundsRect.centerX() + width / 2f, boundsRect.centerY() + height / 2f);
+            clipPath.reset();
+            clipPath.addRoundRect(boundsRect, cornerRadius, cornerRadius, Path.Direction.CW);
+            int save = canvas.save();
+            canvas.clipPath(clipPath);
+            canvas.drawBitmap(bitmap, null, destination, paint);
+            canvas.restoreToCount(save);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            paint.setAlpha(alpha);
+            invalidateSelf();
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter colorFilter) {
+            paint.setColorFilter(colorFilter);
+            invalidateSelf();
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
         }
     }
 
@@ -632,6 +832,7 @@ final class PadThemeCustomizer {
         preferences.edit().putInt(KEY_PRESET, preset).apply();
         applyGlobalBackground();
         for (int i = 0; i < pads.length; i++) applyPadImage(i);
+        applyFavoriteButtons();
     }
 
     private void clearPadImages() {
@@ -706,30 +907,23 @@ final class PadThemeCustomizer {
         }
     }
 
-    private int presetPadColor() {
-        switch (preferences.getInt(KEY_PRESET, 0)) {
-            case 1: return 0xFF092632;
-            case 2: return 0xFF3A1111;
-            case 3: return 0xFF52647A;
-            case 4: return 0xFF38234D;
-            default: return 0xFF242424;
-        }
-    }
-
     private Drawable createPadBase(int padIndex) {
         int preset = preferences.getInt(KEY_PRESET, 0);
         if (preset == 0) return cloneDrawable(basePadBackgrounds[padIndex]);
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.RECTANGLE);
-        background.setCornerRadius(dp(18));
-        background.setColor(presetPadColor());
-        return background;
+        return createThemePadBase(preset);
     }
 
     private Drawable addPadBorder(int padIndex, Drawable base) {
-        int color = getBorderColor(padIndex);
+        int color = getPadOutlineColor(padIndex);
         if (color == 0) return base;
         return new LayerDrawable(new Drawable[]{base, createPadBorder(color)});
+    }
+
+    private int getPadOutlineColor(int padIndex) {
+        int color = getBorderColor(padIndex);
+        if (color != 0) return color;
+        int preset = preferences.getInt(KEY_PRESET, 0);
+        return preset == 0 ? 0 : presetAccent(preset, false);
     }
 
     private Drawable createPadBorder(int color) {
