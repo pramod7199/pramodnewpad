@@ -1708,12 +1708,15 @@ public class MainActivity extends Activity {
         this.fxControlBar = findViewById(R.id.fxControlBar);
         this.advControlBar = findViewById(R.id.advControlBar);
 
-        // ── Drums APK: LOOPS/STOP hide, Sign Out FX/ADV me ──────────────────
-        if (BuildConfig.FLAVOR.equals("drums")) {
-            // 1. LOOPS aur STOP buttons hata do (LoopsActivity se koi matlab nahi)
+        // Pro and Drums APKs do not expose loop navigation controls.
+        if (BuildConfig.FLAVOR.equals("pro") || BuildConfig.FLAVOR.equals("drums")) {
             if (this.btnLoops != null) this.btnLoops.setVisibility(View.GONE);
             View btnStopLoop = findViewById(R.id.btnStopLoop);
             if (btnStopLoop != null) btnStopLoop.setVisibility(View.GONE);
+        }
+
+        // ── Drums APK: Sign Out FX/ADV me ────────────────────────────────────
+        if (BuildConfig.FLAVOR.equals("drums")) {
             // 3. FX/ADV panel ke andar Sign Out button dikhao + wire karo
             Button btnDrumsSignOut = findViewById(R.id.btnDrumsSignOut);
             if (btnDrumsSignOut != null) {
