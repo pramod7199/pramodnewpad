@@ -54,12 +54,12 @@ jobs:
           gradle wrapper --gradle-version 8.11.1 --distribution-type bin
           chmod +x gradlew
 
-      # ── 7. Build 3 APKs (full / loops / drums) ────────────────────────────
-      - name: Build all 3 Debug APKs
+      # ── 7. Build all 4 app flavors ────────────────────────────────────────
+      - name: Build all 4 Debug APKs
         working-directory: gradle_build
         run: |
           set -o pipefail
-          ./gradlew assembleFullDebug assembleLoopsDebug assembleDrumsDebug \
+          ./gradlew assembleFullDebug assembleLoopsDebug assembleDrumsDebug assembleProDebug \
             --no-daemon \
             --stacktrace \
             --warning-mode all \
@@ -70,7 +70,7 @@ jobs:
         if: failure()
         run: tail -n 400 /tmp/build_debug.log || true
 
-      # ── 9. Collect all 3 APKs ─────────────────────────────────────────────
+      # ── 9. Collect all 4 APKs ─────────────────────────────────────────────
       - name: Rename APKs
         if: success()
         run: |
@@ -83,9 +83,11 @@ jobs:
              "artifacts/PramodOctapad-Loops-v1.0-debug-${SHORT}.apk"
           cp "gradle_build/app/build/outputs/apk/drums/debug/app-drums-debug.apk" \
              "artifacts/PramodOctapad-Drums-v1.0-debug-${SHORT}.apk"
+          cp "gradle_build/app/build/outputs/apk/pro/debug/app-pro-debug.apk" \
+             "artifacts/PramodOctapad-Pro-v1.0-debug-${SHORT}.apk"
           echo "=== Built APKs ===" && ls -lh artifacts/
 
-      # ── 10. Upload all 3 APKs as separate artifacts ────────────────────────
+      # ── 10. Upload all 4 APKs as separate artifacts ───────────────────────
       - name: Upload Full APK (both systems)
         if: success()
         uses: actions/upload-artifact@v4
@@ -113,19 +115,29 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      - name: Upload Pro APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PramodOctapad-Pro-Debug-APK
+          path: artifacts/PramodOctapad-Pro-v1.0-debug-*.apk
+          retention-days: 30
+          if-no-files-found: error
+
       # ── 11. Build summary ─────────────────────────────────────────────────
       - name: Print build summary
         if: always()
         run: |
-          echo "## 📦 Build Summary — 3 APKs" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Build Summary — 4 APKs" >> $GITHUB_STEP_SUMMARY
           echo "| APK | Package | Size |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|---------|------|" >> $GITHUB_STEP_SUMMARY
           declare -A PKG=(
             [Full]="com.pramod.loopmidi"
             [Loops]="com.pramod.loopmidi.loops"
             [Drums]="com.pramod.loopmidi.drums"
+            [Pro]="com.pramod.loopmidi.pro"
           )
-          for flavor in Full Loops Drums; do
+          for flavor in Full Loops Drums Pro; do
             f="artifacts/PramodOctapad-${flavor}-v1.0-debug-${{ github.sha }}"; f="${f:0:55}"; \
             apk=$(ls artifacts/PramodOctapad-${flavor}-*.apk 2>/dev/null | head -1)
             [ -f "$apk" ] && echo "| \`$(basename $apk)\` | \`${PKG[$flavor]}\` | $(du -sh $apk | cut -f1) |" >> $GITHUB_STEP_SUMMARY

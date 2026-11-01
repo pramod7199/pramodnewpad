@@ -226,7 +226,8 @@ public class LoginActivity extends Activity {
                 // allowedApps field nahi hai → purana user, teeno allowed (backward compat)
                 // allowedApps hai → current flavor ka value check karo
                 DataSnapshot appsSnap = snapshot.child("allowedApps");
-                if (appsSnap.exists()) {
+                boolean requiresExplicitGrant = BuildConfig.FLAVOR.equals("pro");
+                if (appsSnap.exists() || requiresExplicitGrant) {
                     Boolean allowed = appsSnap.child(BuildConfig.FLAVOR).getValue(Boolean.class);
                     if (allowed == null || !allowed) {
                         runOnUiThread(() -> {
@@ -412,6 +413,7 @@ public class LoginActivity extends Activity {
             case "full":  return "Full";
             case "loops": return "Loops";
             case "drums": return "Drums";
+            case "pro":   return "Pro";
             default:      return flavor;
         }
     }

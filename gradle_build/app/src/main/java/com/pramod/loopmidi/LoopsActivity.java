@@ -1324,7 +1324,7 @@ public class LoopsActivity extends Activity implements DialogInterface.OnClickLi
 
     @Override // android.app.Activity
     public void onBackPressed() {
-        if (BuildConfig.FLAVOR.equals("full")) {
+        if (BuildConfig.FLAVOR.equals("full") || BuildConfig.FLAVOR.equals("pro")) {
             // Full APK: pressing back while a loop is playing should keep the
             // audio going so the user can work pads in MainActivity while the
             // loop runs.  We reorder MainActivity to the front WITHOUT calling

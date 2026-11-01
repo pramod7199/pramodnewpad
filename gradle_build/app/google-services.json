@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "1070428492610",
+    "firebase_url": "https://pramod-octapad-loop-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "pramod-octapad-loop",
     "storage_bucket": "pramod-octapad-loop.firebasestorage.app"
   },
@@ -44,14 +45,51 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1070428492610:android:463803a2e3c8dff1b0eedb",
+        "mobilesdk_app_id": "1:1070428492610:android:faf1a12357feb821b0eedb",
+        "android_client_info": {
+          "package_name": "com.pramod.loopmidi.drums"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1070428492610-i3eu79r2c1jrj2660evqopc7an40gn45.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pramod.loopmidi.drums",
+            "certificate_hash": "9324732a57a16f3f5244991f32a4bbd178ff6659"
+          }
+        },
+        {
+          "client_id": "1070428492610-9vhr25vajqnd8dtmjg1tqcsiblchjvv3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAM5iLKu7EBcodDUgBiGadmIAsMv82yxhc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1070428492610-9vhr25vajqnd8dtmjg1tqcsiblchjvv3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1070428492610:android:77cbd3597a8039e8b0eedb",
         "android_client_info": {
           "package_name": "com.pramod.loopmidi.loops"
         }
       },
       "oauth_client": [
         {
-          "client_id": "1070428492610-4ob9cmeo9es55p8uc6a4i51a9u1ni61l.apps.googleusercontent.com",
+          "client_id": "1070428492610-6st3v42uo6gh4ggv7crmqcjp3bk8hqjj.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.pramod.loopmidi.loops",
@@ -81,17 +119,17 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1070428492610:android:463803a2e3c8dff1b0eedb",
+        "mobilesdk_app_id": "1:1070428492610:android:8a9382967c10abd6b0eedb",
         "android_client_info": {
-          "package_name": "com.pramod.loopmidi.drums"
+          "package_name": "com.pramod.loopmidi.pro"
         }
       },
       "oauth_client": [
         {
-          "client_id": "1070428492610-4ob9cmeo9es55p8uc6a4i51a9u1ni61l.apps.googleusercontent.com",
+          "client_id": "1070428492610-svah7vsm1tkg4qmvii6nt7vfak2g353e.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.pramod.loopmidi.drums",
+            "package_name": "com.pramod.loopmidi.pro",
             "certificate_hash": "9324732a57a16f3f5244991f32a4bbd178ff6659"
           }
         },
