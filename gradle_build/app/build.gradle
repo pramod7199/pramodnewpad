@@ -89,9 +89,10 @@ android {
         // Loop pad sounds (assets/) are used by LoopsActivity only.
         // Drum pad sounds (raw WAVs) are used by MainActivity only.
         // Shared dirs keep each flavor's APK free of the sounds it never plays.
-        //   full/pro → both
+        //   full → both
         //   loops → loop sounds only (no drum WAVs)
         //   drums → drum sounds only (no loop sounds)
+        //   pro → drum sounds only (no loop WAVs)
         main {
             assets.srcDirs = []          // loop sounds live in loop_assets now
         }
@@ -99,14 +100,13 @@ android {
             assets.srcDirs = ['src/loop_assets']
             res.srcDirs += ['src/drum_sounds']
         }
-        pro {
-            assets.srcDirs = ['src/loop_assets']
-            res.srcDirs += ['src/drum_sounds']
-        }
         loops {
             assets.srcDirs = ['src/loop_assets']
         }
         drums {
+            res.srcDirs += ['src/drum_sounds']
+        }
+        pro {
             res.srcDirs += ['src/drum_sounds']
         }
     }
