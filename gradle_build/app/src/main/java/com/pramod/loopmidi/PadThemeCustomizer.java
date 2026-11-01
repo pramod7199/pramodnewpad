@@ -676,7 +676,7 @@ final class PadThemeCustomizer {
         GradientDrawable shadow = new GradientDrawable();
         shadow.setShape(GradientDrawable.RECTANGLE);
         shadow.setCornerRadius(dp(18));
-        shadow.setColor(0x99000000);
+        shadow.setColor(preset == 0 ? 0xFF05090E : 0x99000000);
         Drawable face = createPadSurface(colors[4], colors[5], colors[6], colors[7], false);
         GradientDrawable gloss = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{0x77FFFFFF, 0x00FFFFFF});
@@ -720,8 +720,8 @@ final class PadThemeCustomizer {
                 return new int[]{0xFF8655AC, 0xFF5C397A, 0xFF332047, 0xFFE3B4FF,
                         0xFF67438A, 0xFF4B3067, 0xFF2C1B3E, 0xFFD58BFF};
             default:
-                return new int[]{0xFF222222, 0xFF111111, 0xFF000000, 0xFF00AFFF,
-                        0xFF444444, 0xFF1A1A1A, 0xFF000000, 0xFF808080};
+                return new int[]{0xFF152331, 0xFF101B26, 0xFF0B121B, 0xFF48A9C5,
+                        0xFF263847, 0xFF1A2A35, 0xFF111A24, 0xFF456171};
         }
     }
 

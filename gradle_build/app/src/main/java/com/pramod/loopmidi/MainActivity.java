@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
     private static final String KEY_EDIT_MODE = "edit_mode";
     private static final String KEY_KIT_INDEX = "kit_index";
     private static final String KEY_LAST_LIST_FOLDER_URI = "last_list_folder_uri";
+    private static final String KEY_TRIM_NEW_SOUND = "pad_trim_new_sound";
     private static final int MAX_KITS = 400;
     private static final int MIDI_CC_KIT_MAX = 100;
     private static final int PAD_COUNT = 8;
@@ -2417,7 +2418,13 @@ public class MainActivity extends Activity {
         String swapText = this.swapSourcePad == -1 ? "Pad Sound Exchange (Select First Pad)" : "Pad Sound Exchange (Swap Mode ON)";
         String[] options = {"Pad Select Sound", copyText, swapText, "Clear Pad Sound",
                 "Trim Loaded Sound"};
-        new AlertDialog.Builder(this).setTitle("PAD " + (padIndex + 1) + " - EDIT OPTIONS").setItems(options, new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.21
+        CheckBox trimNewSound = new CheckBox(this);
+        trimNewSound.setText("Open waveform to trim new sounds");
+        trimNewSound.setChecked(prefs.getBoolean(KEY_TRIM_NEW_SOUND, false));
+        trimNewSound.setOnCheckedChangeListener((button, checked) ->
+                prefs.edit().putBoolean(KEY_TRIM_NEW_SOUND, checked).apply());
+        new AlertDialog.Builder(this).setTitle("PAD " + (padIndex + 1) + " - EDIT OPTIONS")
+                .setView(trimNewSound).setItems(options, new DialogInterface.OnClickListener() { // from class: com.pramod.loopmidi.MainActivity.21
 
 
             @Override // android.content.DialogInterface.OnClickListener
@@ -3081,6 +3088,51 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void loadAudioWithoutTrim(Uri uri) {
+        final int padIndex = selectedPad;
+        final boolean bankB = bankMode == BANK_B;
+        final int kitNo = bankB ? kitIndexB : kitIndex;
+        final int slot = bankB ? padIndex + 8 : padIndex;
+        final AudioEngine engine = audioEngine;
+        if (engine == null) {
+            Toast.makeText(this, "Audio engine is not ready", Toast.LENGTH_LONG).show();
+            return;
+        }
+        kitLoadExecutor.execute(() -> {
+            final AudioEngine.SampleData sample;
+            try {
+                sample = engine.loadWavFromUri(slot, uri);
+            } catch (Exception error) {
+                Log.e(TAG, "Could not load selected audio", error);
+                runOnUiThread(() -> Toast.makeText(this, "Could not load selected audio",
+                        Toast.LENGTH_LONG).show());
+                return;
+            }
+            runOnUiThread(() -> {
+                if (sample == null) {
+                    Toast.makeText(this, "Could not load selected audio",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+                if (bankB) {
+                    selectedWavUrisB[padIndex] = uri;
+                    selectedRawResIdsB[padIndex] = 0;
+                    samplesB[padIndex] = sample;
+                    loadedSoundKitB = kitNo;
+                } else {
+                    selectedWavUris[padIndex] = uri;
+                    selectedRawResIds[padIndex] = 0;
+                    samples[padIndex] = sample;
+                    loadedSoundKitA = kitNo;
+                }
+                clearTrimRange(bankB, kitNo, padIndex);
+                saveKitToMemory(kitIndex);
+                Toast.makeText(this, "Sound loaded on PAD " + (padIndex + 1),
+                        Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+
     private void trimLoadedPad(int padIndex) {
         final boolean bankB = bankMode == BANK_B;
         final int kitNo = bankB ? kitIndexB : kitIndex;
@@ -3461,7 +3513,11 @@ public class MainActivity extends Activity {
             if (requestCode == REQ_PICK_SINGLE_WAV) {
                 int takeFlags = data.getFlags() & 3;
                 getContentResolver().takePersistableUriPermission(uri, takeFlags);
-                beginAudioImport(uri);
+                if (prefs.getBoolean(KEY_TRIM_NEW_SOUND, false)) {
+                    beginAudioImport(uri);
+                } else {
+                    loadAudioWithoutTrim(uri);
+                }
                 return;
             } else if (requestCode == REQ_LOAD_FOLDER) {
                 getContentResolver().takePersistableUriPermission(uri, 1);
