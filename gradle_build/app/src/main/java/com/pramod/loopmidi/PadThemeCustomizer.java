@@ -19,6 +19,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -42,6 +43,10 @@ final class PadThemeCustomizer {
     private static final String TAG = "PadThemeCustomizer";
     private static final String KEY_PAD_IMAGE = "theme_pad_image_";
     private static final String KEY_PAD_OPACITY = "theme_pad_opacity_";
+    private static final String KEY_PAD_LABEL_VISIBLE = "theme_pad_label_visible";
+    private static final String KEY_PAD_LABEL = "theme_pad_label_";
+    private static final String KEY_PAD_EMOJI = "theme_pad_emoji_";
+    private static final String KEY_COMBINED_IMAGE = "theme_combined_image";
     private static final String KEY_BACKGROUND_IMAGE = "theme_background_image";
     private static final String KEY_BACKGROUND_OPACITY = "theme_background_opacity";
     private static final String KEY_ANIMATION_MODE = "theme_animation_mode";
@@ -63,6 +68,9 @@ final class PadThemeCustomizer {
     private final View root;
     private final View[] backgroundSurfaces;
     private final Drawable[] baseSurfaceBackgrounds;
+    private final Button[] toggleButtons;
+    private Bitmap togglePhoto;
+    private String togglePhotoUri;
     private int pickerPadIndex = -1;
     private boolean applyImageToAll;
 
@@ -86,7 +94,17 @@ final class PadThemeCustomizer {
                 baseSurfaceBackgrounds[i] = backgroundSurfaces[i].getBackground();
             }
         }
-
+        int[] toggleIds = {R.id.btnPrevKit, R.id.btnNextKit, R.id.btnEditMode,
+                R.id.btnThemeToggle, R.id.btnRenameKit, R.id.btnEq, R.id.btnPadEdit,
+                R.id.btnSaveKit, R.id.btnLoadKit, R.id.btnVelocity, R.id.btnMidiMap,
+                R.id.btnBankA, R.id.btnBankB, R.id.btnBankAB, R.id.btnMidiConnect,
+                R.id.btnCCCtrl};
+        java.util.ArrayList<Button> foundToggles = new java.util.ArrayList<>();
+        for (int toggleId : toggleIds) {
+            Button toggle = root.findViewById(toggleId);
+            if (toggle != null) foundToggles.add(toggle);
+        }
+        toggleButtons = foundToggles.toArray(new Button[0]);
     }
 
     void applySavedTheme() {
@@ -94,6 +112,8 @@ final class PadThemeCustomizer {
             applyPadImage(i);
         }
         applyGlobalBackground();
+        applyPadLabels();
+        applyTogglePhoto();
     }
 
     void showDialog(int initialPadIndex) {
@@ -110,7 +130,8 @@ final class PadThemeCustomizer {
         addSectionTitle(content, "APP THEME PRESET");
         RadioGroup presets = new RadioGroup(activity);
         presets.setOrientation(RadioGroup.VERTICAL);
-        String[] presetNames = {"Default grey-black", "Neon", "Red", "Light combo"};
+        String[] presetNames = {"Default grey-black", "Neon", "Red", "Light combo",
+                "Purple haze"};
         int[] presetIds = new int[presetNames.length];
         for (int i = 0; i < presetNames.length; i++) {
             RadioButton preset = new RadioButton(activity);
@@ -138,6 +159,8 @@ final class PadThemeCustomizer {
         Button[] padButtons = new Button[pads.length];
         TextView[] padOpacityLabel = new TextView[1];
         SeekBar[] padOpacityControl = new SeekBar[1];
+        EditText[] padNameField = new EditText[1];
+        EditText[] padEmojiField = new EditText[1];
         for (int i = 0; i < pads.length; i++) {
             final int padIndex = i;
             Button choosePad = new Button(activity);
@@ -151,6 +174,8 @@ final class PadThemeCustomizer {
                 int opacity = preferences.getInt(KEY_PAD_OPACITY + padIndex, 70);
                 padOpacityLabel[0].setText("Pad image opacity: " + opacity + "%");
                 padOpacityControl[0].setProgress(opacity);
+                padNameField[0].setText(getPadLabel(padIndex));
+                padEmojiField[0].setText(preferences.getString(KEY_PAD_EMOJI + padIndex, ""));
             });
         }
         updateSelectedPadButtons(padButtons, selectedPad[0]);
@@ -176,6 +201,45 @@ final class PadThemeCustomizer {
         padOpacityControl[0] = addOpacityControl(content, "Pad image opacity",
                 preferences.getInt(KEY_PAD_OPACITY + selectedPad[0], 70),
                 progress -> setPadOpacity(selectedPad[0], progress), padOpacityLabel);
+        Button removeAllPadImages = addButton(content, "Remove images from all 8 pads");
+        removeAllPadImages.setOnClickListener(v -> {
+            clearPadImages();
+            Toast.makeText(activity, "Images removed from all pads", Toast.LENGTH_SHORT).show();
+        });
+
+        addSectionTitle(content, "PAD LABELS");
+        CheckBox showPadLabels = new CheckBox(activity);
+        showPadLabels.setText("Show pad text labels");
+        showPadLabels.setChecked(preferences.getBoolean(KEY_PAD_LABEL_VISIBLE, true));
+        showPadLabels.setOnCheckedChangeListener((button, checked) -> {
+            preferences.edit().putBoolean(KEY_PAD_LABEL_VISIBLE, checked).apply();
+            applyPadLabels();
+        });
+        content.addView(showPadLabels);
+        EditText padName = new EditText(activity);
+        padName.setSingleLine(true);
+        padName.setHint("Selected pad name");
+        padName.setText(getPadLabel(selectedPad[0]));
+        padNameField[0] = padName;
+        content.addView(padName);
+        EditText padEmoji = new EditText(activity);
+        padEmoji.setSingleLine(true);
+        padEmoji.setHint("Emoji (optional)");
+        padEmoji.setText(preferences.getString(KEY_PAD_EMOJI + selectedPad[0], ""));
+        padEmojiField[0] = padEmoji;
+        content.addView(padEmoji);
+        Button savePadLabel = addButton(content, "Save name and emoji for selected pad");
+        savePadLabel.setOnClickListener(v -> {
+            String name = padName.getText().toString().trim();
+            String emoji = padEmoji.getText().toString().trim();
+            if (name.isEmpty()) name = "PAD " + (selectedPad[0] + 1);
+            preferences.edit()
+                    .putString(KEY_PAD_LABEL + selectedPad[0], name)
+                    .putString(KEY_PAD_EMOJI + selectedPad[0], emoji)
+                    .apply();
+            applyPadLabel(selectedPad[0]);
+            Toast.makeText(activity, "Pad label saved", Toast.LENGTH_SHORT).show();
+        });
 
         addSectionTitle(content, "COMBINED PHOTO");
         Button chooseCombinedImage = addButton(content,
@@ -293,7 +357,8 @@ final class PadThemeCustomizer {
                 applyGlobalBackground();
             } else if (requestCode == REQUEST_COMBINED_IMAGE) {
                 SharedPreferences.Editor editor = preferences.edit()
-                        .putString(KEY_BACKGROUND_IMAGE, uri.toString());
+                        .putString(KEY_BACKGROUND_IMAGE, uri.toString())
+                        .putString(KEY_COMBINED_IMAGE, uri.toString());
                 for (int i = 0; i < pads.length; i++) {
                     editor.putString(KEY_PAD_IMAGE + i, uri.toString());
                 }
@@ -301,6 +366,7 @@ final class PadThemeCustomizer {
                 for (int i = 0; i < pads.length; i++) applyPadImage(i);
                 applyGlobalBackground();
             }
+            if (requestCode == REQUEST_COMBINED_IMAGE) applyTogglePhoto();
         } catch (Exception error) {
             Log.e(TAG, "Could not apply selected theme image", error);
             Toast.makeText(activity, "Could not use that image: " + error.getMessage(),
@@ -394,11 +460,69 @@ final class PadThemeCustomizer {
             }
         } catch (Exception error) {
             Log.e(TAG, "Could not load global theme background", error);
-            preferences.edit().remove(KEY_BACKGROUND_IMAGE).apply();
+            SharedPreferences.Editor editor = preferences.edit().remove(KEY_BACKGROUND_IMAGE);
+            if (uriText.equals(preferences.getString(KEY_COMBINED_IMAGE, null))) {
+                editor.remove(KEY_COMBINED_IMAGE);
+            }
+            editor.apply();
             root.setBackgroundColor(presetRootColor());
             applyPresetSurfaceBackgrounds();
+            applyTogglePhoto();
             Toast.makeText(activity, "Saved background image is unavailable",
                     Toast.LENGTH_LONG).show();
+        }
+    }
+
+    void setToggleStyle(Button button, int styleResource) {
+        if (button == null) return;
+        Drawable style = activity.getDrawable(styleResource);
+        Bitmap photo = getTogglePhoto();
+        if (photo == null) {
+            button.setBackground(style);
+            return;
+        }
+        BitmapDrawable image = new BitmapDrawable(activity.getResources(), photo);
+        image.setAlpha(72);
+        button.setBackground(new LayerDrawable(new Drawable[]{style, image}));
+    }
+
+    private void applyTogglePhoto() {
+        Bitmap photo = getTogglePhoto();
+        for (Button button : toggleButtons) {
+            Drawable current = button.getBackground();
+            Drawable base = current;
+            if (current instanceof LayerDrawable) {
+                LayerDrawable layers = (LayerDrawable) current;
+                base = layers.getDrawable(0);
+            }
+            if (photo == null) {
+                button.setBackground(cloneDrawable(base));
+            } else {
+                BitmapDrawable image = new BitmapDrawable(activity.getResources(), photo);
+                image.setAlpha(72);
+                button.setBackground(new LayerDrawable(
+                        new Drawable[]{cloneDrawable(base), image}));
+            }
+        }
+    }
+
+    private Bitmap getTogglePhoto() {
+        String uriText = preferences.getString(KEY_COMBINED_IMAGE, null);
+        if (uriText == null) {
+            togglePhoto = null;
+            togglePhotoUri = uriText;
+            return null;
+        }
+        if (uriText.equals(togglePhotoUri)) return togglePhoto;
+        try {
+            togglePhoto = decodeImage(Uri.parse(uriText), 512);
+            togglePhotoUri = uriText;
+            return togglePhoto;
+        } catch (IOException error) {
+            Log.e(TAG, "Could not load combined photo for toggle styling", error);
+            togglePhoto = null;
+            togglePhotoUri = uriText;
+            return null;
         }
     }
 
@@ -510,6 +634,31 @@ final class PadThemeCustomizer {
         for (int i = 0; i < pads.length; i++) applyPadImage(i);
     }
 
+    private void clearPadImages() {
+        SharedPreferences.Editor editor = preferences.edit();
+        for (int i = 0; i < pads.length; i++) editor.remove(KEY_PAD_IMAGE + i);
+        editor.apply();
+        for (int i = 0; i < pads.length; i++) applyPadImage(i);
+    }
+
+    private String getPadLabel(int padIndex) {
+        return preferences.getString(KEY_PAD_LABEL + padIndex, "PAD " + (padIndex + 1));
+    }
+
+    private void applyPadLabels() {
+        for (int i = 0; i < pads.length; i++) applyPadLabel(i);
+    }
+
+    private void applyPadLabel(int padIndex) {
+        if (!preferences.getBoolean(KEY_PAD_LABEL_VISIBLE, true)) {
+            pads[padIndex].setText("");
+            return;
+        }
+        String emoji = preferences.getString(KEY_PAD_EMOJI + padIndex, "").trim();
+        String label = getPadLabel(padIndex);
+        pads[padIndex].setText(emoji.isEmpty() ? label : emoji + "\n" + label);
+    }
+
     private void restoreBackgroundSurfaces() {
         for (int i = 0; i < backgroundSurfaces.length; i++) {
             if (backgroundSurfaces[i] != null) {
@@ -528,6 +677,7 @@ final class PadThemeCustomizer {
         switch (preset) {
             case 1: color = 0xFF081923; break;
             case 2: color = 0xFF260B0B; break;
+            case 4: color = 0xFF21152E; break;
             default: color = 0xFF263448; break;
         }
         for (int i = 0; i < backgroundSurfaces.length; i++) {
@@ -551,6 +701,7 @@ final class PadThemeCustomizer {
             case 1: return 0xFF050C14;
             case 2: return 0xFF180707;
             case 3: return 0xFFE9EDF2;
+            case 4: return 0xFF160D21;
             default: return 0xFF111111;
         }
     }
@@ -560,6 +711,7 @@ final class PadThemeCustomizer {
             case 1: return 0xFF092632;
             case 2: return 0xFF3A1111;
             case 3: return 0xFF52647A;
+            case 4: return 0xFF38234D;
             default: return 0xFF242424;
         }
     }
@@ -678,14 +830,16 @@ final class PadThemeCustomizer {
 
     private void clearCombinedImage() {
         SharedPreferences.Editor editor = preferences.edit()
-                .remove(KEY_BACKGROUND_IMAGE);
+                .remove(KEY_BACKGROUND_IMAGE)
+                .remove(KEY_COMBINED_IMAGE);
         for (int i = 0; i < pads.length; i++) {
             editor.remove(KEY_PAD_IMAGE + i);
         }
         editor.apply();
         for (int i = 0; i < pads.length; i++) applyPadImage(i);
         applyGlobalBackground();
-        Toast.makeText(activity, "Combined photo removed from pads and background",
+        applyTogglePhoto();
+        Toast.makeText(activity, "Combined photo removed from pads, background, and toggles",
                 Toast.LENGTH_SHORT).show();
     }
 

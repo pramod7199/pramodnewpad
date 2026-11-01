@@ -56,7 +56,8 @@ public class MainActivity extends Activity {
     private static final String KEY_EDIT_MODE = "edit_mode";
     private static final String KEY_KIT_INDEX = "kit_index";
     private static final String KEY_LAST_LIST_FOLDER_URI = "last_list_folder_uri";
-    private static final int MAX_KITS = 100;
+    private static final int MAX_KITS = 400;
+    private static final int MIDI_CC_KIT_MAX = 100;
     private static final int PAD_COUNT = 8;
     private static final String PREF_NAME = "OctapadSettings";
     private static final int REQ_LIST_FOLDER = 2003;
@@ -293,14 +294,16 @@ public class MainActivity extends Activity {
         // of init order: if prefs hold a different index than the in-memory one,
         // trust prefs and reload. (Normal resumes are cheap — no reload when the
         // index already matches.)
-        int savedIdx = this.prefs.getInt(KEY_KIT_INDEX, this.kitIndex);
-        int savedIdxB = this.prefs.getInt("kit_index_B", this.kitIndexB);
+        int savedIdx = Math.max(1, Math.min(MAX_KITS,
+                this.prefs.getInt(KEY_KIT_INDEX, this.kitIndex)));
+        int savedIdxB = Math.max(1, Math.min(MAX_KITS,
+                this.prefs.getInt("kit_index_B", this.kitIndexB)));
         int savedMode = this.prefs.getInt("bank_mode", this.bankMode);
         boolean kitStateStale = (savedIdx != this.kitIndex)
                 || (savedIdxB != this.kitIndexB)
                 || (savedMode != this.bankMode);
-        if (savedIdx >= 1 && savedIdx != this.kitIndex) this.kitIndex = savedIdx;
-        if (savedIdxB >= 1 && savedIdxB != this.kitIndexB) this.kitIndexB = savedIdxB;
+        if (savedIdx != this.kitIndex) this.kitIndex = savedIdx;
+        if (savedIdxB != this.kitIndexB) this.kitIndexB = savedIdxB;
         if (savedMode >= BANK_A && savedMode <= LAYER_AB) this.bankMode = savedMode;
 
         if (this.audioEngine == null) {
@@ -1150,13 +1153,13 @@ public class MainActivity extends Activity {
             } else if (cc == ccVolPlus) {
                 drumMasterVolume = Math.min(1f, drumMasterVolume + 0.01f);
             } else if (cc == ccKitAbs) {
-                // Absolute Kit: CC 0-127 selects drum kit 1-100 (same mapping
-                // as the loop channel). Debounce the actual load so a sweeping
-                // pot doesn't keep invalidating the background sample load
+                // Preserve the existing MIDI CC mapping to kits 1-100.
+                // Debounce the actual load so a sweeping pot doesn't keep invalidating
+                // the background sample load
                 // (kitLoadGeneration) before it can finish — without this the
                 // kit NAME updates instantly but the pad SOUNDS stay old.
-                final int target = 1 + Math.round(value * (MAX_KITS - 1) / 127f);
-                if (target >= 1 && target <= MAX_KITS && target != kitIndex) {
+                final int target = 1 + Math.round(value * (MIDI_CC_KIT_MAX - 1) / 127f);
+                if (target >= 1 && target <= MIDI_CC_KIT_MAX && target != kitIndex) {
                     ccKitDebounceTarget = target;
                     if (ccKitDebounceRunnable != null) {
                         ccKitDebounceHandler.removeCallbacks(ccKitDebounceRunnable);
@@ -1165,7 +1168,7 @@ public class MainActivity extends Activity {
                         int t = ccKitDebounceTarget;
                         ccKitDebounceTarget = -1;
                         ccKitDebounceRunnable = null;
-                        if (t >= 1 && t <= MAX_KITS && t != kitIndex) {
+                        if (t >= 1 && t <= MIDI_CC_KIT_MAX && t != kitIndex) {
                             saveKitToMemory(kitIndex);
                             kitIndex = t;
                             prefs.edit().putInt(KEY_KIT_INDEX, kitIndex).commit();
@@ -1306,10 +1309,10 @@ public class MainActivity extends Activity {
         midiLearnMode = false;
         if (midiKeyMappingEnabled) {
             btnMidiMap.setText("🎹MAP\nON");
-            btnMidiMap.setBackgroundResource(R.drawable.btn_3d_orange);
+            setToggleStyle(btnMidiMap, R.drawable.toggle_pro_on);
         } else {
             btnMidiMap.setText("🎹MAP\nOFF");
-            btnMidiMap.setBackgroundResource(R.drawable.btn_3d_dark);
+            setToggleStyle(btnMidiMap, R.drawable.toggle_pro_off);
         }
     }
 
@@ -1357,10 +1360,10 @@ public class MainActivity extends Activity {
         if (btnMidiConnect == null) return;
         if (connected) {
             btnMidiConnect.setText("🔌MIDI\nON");
-            btnMidiConnect.setBackgroundResource(R.drawable.btn_3d_orange);
+            setToggleStyle(btnMidiConnect, R.drawable.toggle_pro_on);
         } else {
             btnMidiConnect.setText("🔌MIDI\nOFF");
-            btnMidiConnect.setBackgroundResource(R.drawable.btn_3d_dark);
+            setToggleStyle(btnMidiConnect, R.drawable.toggle_pro_off);
         }
     }
 
@@ -1570,10 +1573,10 @@ public class MainActivity extends Activity {
         if (btnVelocity == null) return;
         if (velocitySensitiveMode) {
             btnVelocity.setText("🎚️VEL\nON");
-            btnVelocity.setBackgroundResource(R.drawable.btn_3d_orange);
+            setToggleStyle(btnVelocity, R.drawable.toggle_pro_on);
         } else {
             btnVelocity.setText("🎚️VEL\nOFF");
-            btnVelocity.setBackgroundResource(R.drawable.btn_3d_dark);
+            setToggleStyle(btnVelocity, R.drawable.toggle_pro_off);
         }
     }
 
@@ -1789,13 +1792,10 @@ public class MainActivity extends Activity {
         }
         this.editMode = this.prefs.getBoolean(KEY_EDIT_MODE, false);
         int i = this.prefs.getInt(KEY_KIT_INDEX, 1);
-        this.kitIndex = i;
-        if (i < 1) {
-            this.kitIndex = 1;
-        }
+        this.kitIndex = Math.max(1, Math.min(MAX_KITS, i));
         // Restore Bank B's independent kit index (defaults to kitIndex for backward compat)
-        this.kitIndexB = this.prefs.getInt("kit_index_B", this.kitIndex);
-        if (this.kitIndexB < 1) this.kitIndexB = 1;
+        this.kitIndexB = Math.max(1,
+                Math.min(MAX_KITS, this.prefs.getInt("kit_index_B", this.kitIndex)));
         // Restore Bank mode (A / B / A+B Layer)
         this.bankMode = this.prefs.getInt("bank_mode", BANK_A);
         updateBankToggleButton();
@@ -1874,12 +1874,14 @@ public class MainActivity extends Activity {
                         if (MainActivity.this.fxControlBar.getVisibility() == 0) {
                             MainActivity.this.fxControlBar.setVisibility(8);
                             MainActivity.this.advControlBar.setVisibility(8);
-                            MainActivity.this.btnEq.setBackgroundResource(R.drawable.btn_3d_dark);
+                            MainActivity.this.setToggleStyle(
+                                    MainActivity.this.btnEq, R.drawable.toggle_pro_off);
                             return;
                         }
                         MainActivity.this.fxControlBar.setVisibility(0);
                         MainActivity.this.advControlBar.setVisibility(0);
-                        MainActivity.this.btnEq.setBackgroundResource(R.drawable.btn_3d_orange);
+                        MainActivity.this.setToggleStyle(
+                                MainActivity.this.btnEq, R.drawable.toggle_pro_on);
                     }
                 }
             });
@@ -2225,27 +2227,39 @@ public class MainActivity extends Activity {
 
     public void updateEditButtonUI() {
         this.btnEditMode.setText(this.editMode ? "EDIT ON" : "EDIT OFF");
-        this.btnEditMode.setBackgroundResource(this.editMode ? R.drawable.btn_3d_red : R.drawable.btn_3d_dark);
+        setToggleStyle(this.btnEditMode,
+                this.editMode ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off);
     }
 
     private void updateThemeButtonUI() {
         if (btnThemeToggle == null) return;
         btnThemeToggle.setText(themeMode ? "THEME ON" : "THEME OFF");
-        btnThemeToggle.setBackgroundResource(
-                themeMode ? R.drawable.btn_3d_orange : R.drawable.btn_3d_dark);
+        setToggleStyle(btnThemeToggle,
+                themeMode ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off);
+    }
+
+    private void setToggleStyle(Button button, int styleResource) {
+        if (themeCustomizer != null) {
+            themeCustomizer.setToggleStyle(button, styleResource);
+        } else if (button != null) {
+            button.setBackgroundResource(styleResource);
+        }
     }
 
     /** Highlights the active bank selector button (A / B / A+B) to match bankMode. */
     public void updateBankToggleButton() {
         // Highlight the active bank button; dim the others.
         if (btnBankA != null) {
-            btnBankA.setBackgroundResource(bankMode == BANK_A ? R.drawable.btn_3d_darkred : R.drawable.btn_3d_dark);
+            setToggleStyle(btnBankA, bankMode == BANK_A
+                    ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off);
         }
         if (btnBankB != null) {
-            btnBankB.setBackgroundResource(bankMode == BANK_B ? R.drawable.btn_3d_blue : R.drawable.btn_3d_dark);
+            setToggleStyle(btnBankB, bankMode == BANK_B
+                    ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off);
         }
         if (btnBankAB != null) {
-            btnBankAB.setBackgroundResource(bankMode == LAYER_AB ? R.drawable.btn_3d_orange : R.drawable.btn_3d_dark);
+            setToggleStyle(btnBankAB, bankMode == LAYER_AB
+                    ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off);
         }
         // ── Refresh seekbars to show correct bank's values for current pad ──
         refreshSeekBarsForCurrentBankAndPad();
@@ -4557,7 +4571,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** Tap kit name → number keyboard → jump directly to any kit 1-100. */
+    /** Tap kit name → number keyboard → jump directly to any kit 1-400. */
     private void showKitJumpDialog() {
         EditText et = new EditText(this);
         et.setInputType(InputType.TYPE_CLASS_NUMBER);
