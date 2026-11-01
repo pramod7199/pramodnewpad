@@ -523,9 +523,11 @@ final class PadThemeCustomizer {
     private void applyToggleStyle(Button button) {
         boolean isOn = Boolean.TRUE.equals(toggleStates.get(button));
         int preset = preferences.getInt(KEY_PRESET, 0);
+        boolean navigationKey = button.getId() == R.id.btnPrevKit
+                || button.getId() == R.id.btnNextKit;
         Drawable style = preset == 0
-                ? activity.getDrawable(isOn
-                        ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off)
+                ? activity.getDrawable(navigationKey ? R.drawable.spd30_key_red
+                        : isOn ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off)
                 : createRaisedButton(preset, isOn, 10, 3, false);
         Bitmap photo = getTogglePhoto();
         if (photo == null) {
@@ -537,7 +539,8 @@ final class PadThemeCustomizer {
             combined.setLayerInset(1, dp(1), dp(1), dp(1), dp(4));
             button.setBackground(combined);
         }
-        button.setTextColor(preset == 3 ? 0xFF172033 : Color.WHITE);
+        button.setTextColor(preset == 3 || (preset == 0 && !isOn && !navigationKey)
+                ? 0xFF202326 : Color.WHITE);
     }
 
     private void applyFavoriteButtons() {
@@ -564,7 +567,8 @@ final class PadThemeCustomizer {
         } else {
             button.setBackground(style);
         }
-        button.setTextColor(preset == 3 ? 0xFF172033 : Color.WHITE);
+        button.setTextColor(preset == 3 || (preset == 0 && !favoriteFilled[index])
+                ? 0xFF202326 : Color.WHITE);
     }
 
     private Drawable createRaisedButton(int preset, boolean filled, int radiusDp, int depthDp,
@@ -720,8 +724,8 @@ final class PadThemeCustomizer {
                 return new int[]{0xFF8655AC, 0xFF5C397A, 0xFF332047, 0xFFE3B4FF,
                         0xFF67438A, 0xFF4B3067, 0xFF2C1B3E, 0xFFD58BFF};
             default:
-                return new int[]{0xFF152331, 0xFF101B26, 0xFF0B121B, 0xFF48A9C5,
-                        0xFF263847, 0xFF1A2A35, 0xFF111A24, 0xFF456171};
+                return new int[]{0xFF383A3C, 0xFF2B2D2F, 0xFF171819, 0xFFB7B9BB,
+                        0xFF56595B, 0xFF3B3D3F, 0xFF111213, 0xFFD4D5D6};
         }
     }
 
