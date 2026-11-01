@@ -39,6 +39,8 @@ import android.widget.Toast;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 final class PadThemeCustomizer {
     static final int REQUEST_PAD_IMAGE = 5011;
@@ -80,6 +82,7 @@ final class PadThemeCustomizer {
     private final Button[] toggleButtons;
     private Button[] favoriteButtons = new Button[0];
     private boolean[] favoriteFilled = new boolean[0];
+    private final Map<Button, Boolean> toggleStates = new IdentityHashMap<>();
     private Bitmap togglePhoto;
     private String togglePhotoUri;
     private int pickerPadIndex = -1;
@@ -113,7 +116,10 @@ final class PadThemeCustomizer {
         java.util.ArrayList<Button> foundToggles = new java.util.ArrayList<>();
         for (int toggleId : toggleIds) {
             Button toggle = root.findViewById(toggleId);
-            if (toggle != null) foundToggles.add(toggle);
+            if (toggle != null) {
+                foundToggles.add(toggle);
+                toggleStates.put(toggle, false);
+            }
         }
         toggleButtons = foundToggles.toArray(new Button[0]);
     }
@@ -124,7 +130,7 @@ final class PadThemeCustomizer {
         }
         applyGlobalBackground();
         applyPadLabels();
-        applyTogglePhoto();
+        applyToggleStyles();
     }
 
     void setFavoriteButtons(Button[] buttons, boolean[] filled) {
@@ -502,36 +508,41 @@ final class PadThemeCustomizer {
 
     void setToggleStyle(Button button, int styleResource) {
         if (button == null) return;
-        Drawable style = activity.getDrawable(styleResource);
-        Bitmap photo = getTogglePhoto();
-        if (photo == null) {
-            button.setBackground(style);
-            return;
-        }
-        BitmapDrawable image = new BitmapDrawable(activity.getResources(), photo);
-        image.setAlpha(72);
-        button.setBackground(new LayerDrawable(new Drawable[]{style, image}));
+        toggleStates.put(button, styleResource == R.drawable.toggle_pro_on);
+        applyToggleStyle(button);
     }
 
     private void applyTogglePhoto() {
-        Bitmap photo = getTogglePhoto();
         for (Button button : toggleButtons) {
-            Drawable current = button.getBackground();
-            Drawable base = current;
-            if (current instanceof LayerDrawable) {
-                LayerDrawable layers = (LayerDrawable) current;
-                base = layers.getDrawable(0);
-            }
-            if (photo == null) {
-                button.setBackground(cloneDrawable(base));
-            } else {
-                BitmapDrawable image = new BitmapDrawable(activity.getResources(), photo);
-                image.setAlpha(72);
-                button.setBackground(new LayerDrawable(
-                        new Drawable[]{cloneDrawable(base), image}));
-            }
+            applyToggleStyle(button);
         }
         applyFavoriteButtons();
+    }
+
+    private void applyToggleStyles() {
+        for (Button button : toggleButtons) {
+            applyToggleStyle(button);
+        }
+    }
+
+    private void applyToggleStyle(Button button) {
+        boolean isOn = Boolean.TRUE.equals(toggleStates.get(button));
+        int preset = preferences.getInt(KEY_PRESET, 0);
+        Drawable style = preset == 0
+                ? activity.getDrawable(isOn
+                        ? R.drawable.toggle_pro_on : R.drawable.toggle_pro_off)
+                : createRaisedButton(preset, isOn, 10, 3, false);
+        Bitmap photo = getTogglePhoto();
+        if (photo == null) {
+            button.setBackground(style);
+        } else {
+            CenterCropDrawable image = new CenterCropDrawable(photo, dp(9));
+            image.setAlpha(72);
+            LayerDrawable combined = new LayerDrawable(new Drawable[]{style, image});
+            combined.setLayerInset(1, dp(1), dp(1), dp(1), dp(4));
+            button.setBackground(combined);
+        }
+        button.setTextColor(preset == 3 ? 0xFF172033 : Color.WHITE);
     }
 
     private void applyFavoriteButtons() {
@@ -832,6 +843,7 @@ final class PadThemeCustomizer {
         preferences.edit().putInt(KEY_PRESET, preset).apply();
         applyGlobalBackground();
         for (int i = 0; i < pads.length; i++) applyPadImage(i);
+        applyToggleStyles();
         applyFavoriteButtons();
     }
 
