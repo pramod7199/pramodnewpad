@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.pramod.loopmidi">
+
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+
+    <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
+    <!-- required=false: loops-only APK bhi MIDI-less devices pe install ho sake -->
+    <uses-feature android:name="android.software.midi" android:required="false"/>
+
+    <application
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:extractNativeLibs="true">
+
+        <!-- Launcher: Google sign-in + activation check -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="true"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- License / activation screen -->
+        <activity
+            android:name=".ActivationActivity"
+            android:exported="true"
+            android:screenOrientation="landscape"/>
+
+        <!-- Main loop-pad player -->
+        <activity
+            android:name=".LoopsActivity"
+            android:exported="true"
+            android:screenOrientation="landscape"/>
+
+        <!-- Octapad drum pad screen (launched from LoopsActivity) -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"/>
+
+    </application>
+</manifest>

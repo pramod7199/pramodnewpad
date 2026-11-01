@@ -1,0 +1,484 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootMain"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#ff101418"
+    android:orientation="horizontal"
+    android:padding="6dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="6dp"
+        android:layout_weight="2.15"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:background="@drawable/panel_pro"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp">
+
+            <TextView
+                android:id="@+id/txtBrand"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:shadowColor="#7a4400"
+                android:shadowDx="2"
+                android:shadowDy="2"
+                android:shadowRadius="2"
+                android:text="PRAMOD OCTAPAD SPD-30"
+                android:textColor="#ffffffff"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtMidiStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="MIDI: disconnected"
+                android:textColor="#ff63e6a2"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/padArea"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="5dp"
+            android:layout_weight="1"
+            android:background="@drawable/panel_pro"
+            android:orientation="vertical"
+            android:padding="4dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/pad1"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/pad_black_selector"
+                    android:text="PAD 1"
+                    android:textColor="#ffffffff"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/pad2"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/pad_black_selector"
+                    android:text="PAD 2"
+                    android:textColor="#ffffffff"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/pad3"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/pad_black_selector"
+                    android:text="PAD 3"
+                    android:textColor="#ffffffff"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/pad4"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/pad_black_selector"
+                    android:text="PAD 4"
+                    android:textColor="#ffffffff"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/pad5"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/pad_black_selector"
+                    android:text="PAD 5"
+                    android:textColor="#ffffffff"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/pad6"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/pad_black_selector"
+                    android:text="PAD 6"
+                    android:textColor="#ffffffff"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/pad7"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/pad_black_selector"
+                    android:text="PAD 7"
+                    android:textColor="#ffffffff"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/pad8"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/pad_black_selector"
+                    android:text="PAD 8"
+                    android:textColor="#ffffffff"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/favDrumRow"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/panel_pro"
+            android:orientation="vertical"
+            android:padding="3dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/favDrum1" style="@style/SpdFavoriteButton" android:text="FAV 1" />
+                <Button android:id="@+id/favDrum2" style="@style/SpdFavoriteButton" android:text="FAV 2" />
+                <Button android:id="@+id/favDrum3" style="@style/SpdFavoriteButton" android:text="FAV 3" />
+                <Button android:id="@+id/favDrum4" style="@style/SpdFavoriteButton" android:text="FAV 4" />
+                <Button android:id="@+id/favDrum5" style="@style/SpdFavoriteButton" android:text="FAV 5" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/favDrum6" style="@style/SpdFavoriteButton" android:text="FAV 6" />
+                <Button android:id="@+id/favDrum7" style="@style/SpdFavoriteButton" android:text="FAV 7" />
+                <Button android:id="@+id/favDrum8" style="@style/SpdFavoriteButton" android:text="FAV 8" />
+                <Button android:id="@+id/favDrum9" style="@style/SpdFavoriteButton" android:text="FAV 9" />
+                <Button android:id="@+id/favDrum10" style="@style/SpdFavoriteButton" android:text="FAV 10" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="@drawable/panel_pro"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="7dp">
+
+            <LinearLayout
+                android:id="@+id/topControlBar"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="#ff202a31"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="3dp">
+
+                <Button
+                    android:id="@+id/btnPrevKit"
+                    style="@style/SpdControlButton"
+                    android:layout_weight="1"
+                    android:text="◀" />
+
+                <Button
+                    android:id="@+id/btnNextKit"
+                    style="@style/SpdControlButton"
+                    android:layout_weight="1"
+                    android:text="▶" />
+
+                <Button
+                    android:id="@+id/btnLoops"
+                    style="@style/SpdControlButton"
+                    android:text="LOOPS"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/btnStopLoop"
+                    style="@style/SpdControlButton"
+                    android:onClick="onStopLoopClick"
+                    android:text="STOP"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="88dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/panel_pro"
+                android:orientation="vertical"
+                android:padding="7dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="KIT / LCD"
+                    android:textColor="#ff63e6a2"
+                    android:textSize="9sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtKitName"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:background="#ff09110f"
+                    android:gravity="center_vertical"
+                    android:paddingLeft="8dp"
+                    android:paddingRight="8dp"
+                    android:text="KIT 1"
+                    android:textColor="#ffb5ffbd"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/titleBar"
+                android:layout_width="match_parent"
+                android:layout_height="38dp"
+                android:layout_marginTop="5dp"
+                android:background="#ff202a31"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="3dp">
+
+                <TextView
+                    android:id="@+id/txtSelectedPad"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:maxLines="1"
+                    android:text="PAD 1"
+                    android:textColor="#ff83f4ff"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <Button android:id="@+id/btnBankA" style="@style/SpdControlButton" android:text="A" />
+                <Button android:id="@+id/btnBankB" style="@style/SpdControlButton" android:text="B" />
+                <Button android:id="@+id/btnBankAB" style="@style/SpdControlButton" android:text="A+B" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/btnEditMode" style="@style/SpdControlButton" android:text="EDIT" />
+                <Button android:id="@+id/btnThemeToggle" style="@style/SpdControlButton" android:text="THEME" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/btnPadEdit" style="@style/SpdControlButton" android:text="PAD EDIT" />
+                <Button android:id="@+id/btnEq" style="@style/SpdControlButton" android:text="FX / ADV" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/btnRenameKit" style="@style/SpdControlButton" android:text="RENAME" />
+                <Button android:id="@+id/btnSaveKit" style="@style/SpdControlButton" android:text="SAVE KIT" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/btnLoadKit" style="@style/SpdControlButton" android:text="LOAD KIT" />
+                <Button android:id="@+id/btnVelocity" style="@style/SpdControlButton" android:text="VEL OFF" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/btnMidiMap" style="@style/SpdControlButton" android:text="MAP OFF" />
+                <Button android:id="@+id/btnMidiConnect" style="@style/SpdControlButton" android:text="MIDI OFF" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btnCCCtrl"
+                style="@style/SpdControlButton"
+                android:layout_width="match_parent"
+                android:text="MIDI CC CONTROL" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:padding="4dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="VOLUME"
+                        android:textColor="#ffffffff"
+                        android:textSize="9sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekVolume"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:max="100"
+                        android:progressBackgroundTint="#ff263847"
+                        android:progressTint="#ff48a9c5"
+                        android:thumbTint="#ff83f4ff" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:padding="4dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="PITCH"
+                        android:textColor="#ffffffff"
+                        android:textSize="9sp" />
+
+                    <SeekBar
+                        android:id="@+id/seekPitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:max="150"
+                        android:progressBackgroundTint="#ff263847"
+                        android:progressTint="#ff48a9c5"
+                        android:thumbTint="#ff83f4ff" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/txtSignedInAs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:padding="4dp"
+                android:singleLine="true"
+                android:textColor="#ff00afff"
+                android:textSize="9sp" />
+
+            <Button
+                android:id="@+id/btnSignOut"
+                style="@style/SpdControlButton"
+                android:layout_width="match_parent"
+                android:text="SIGN OUT" />
+
+            <Button
+                android:id="@+id/btnDrumsSignOut"
+                style="@style/SpdControlButton"
+                android:layout_width="match_parent"
+                android:text="SIGN OUT"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/fxControlBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <CheckBox
+                    android:id="@+id/chkDelay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="DELAY"
+                    android:textColor="#ff00ffff" />
+
+                <SeekBar android:id="@+id/seekDelayTime" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500" />
+                <SeekBar android:id="@+id/seekDelayLevel" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+                <SeekBar android:id="@+id/seekEqHigh" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" />
+                <SeekBar android:id="@+id/seekEqMid" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" />
+                <SeekBar android:id="@+id/seekEqLow" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/advControlBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <SeekBar android:id="@+id/seekAttack" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500" />
+                <SeekBar android:id="@+id/seekRelease" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500" />
+                <SeekBar android:id="@+id/seekChokeGroup" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="4" />
+                <Button android:id="@+id/btnPadColor" style="@style/SpdControlButton" android:layout_width="match_parent" android:text="PAD COLOR" />
+                <SeekBar android:id="@+id/seekMasterVolume" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" />
+                <SeekBar android:id="@+id/seekMasterPitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

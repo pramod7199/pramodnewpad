@@ -1,0 +1,106 @@
+plugins {
+    id 'com.android.application' version '8.2.2'
+    id 'com.google.gms.google-services' version '4.4.1'
+}
+
+android {
+    namespace 'com.pramod.loopmidi'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'pramod.octapad.spd30'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17"
+                arguments "-DANDROID_STL=c++_shared"
+                abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file('keystore/debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeType 'PKCS12'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    buildFeatures {
+        prefab true
+        buildConfig true
+    }
+
+    flavorDimensions "system"
+    productFlavors {
+        pro {
+            dimension "system"
+            resValue "string", "app_name", "Pramod Octapad SPD-30"
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs = []
+        }
+        pro {
+            res.srcDirs += ['src/drum_sounds']
+        }
+    }
+
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/NOTICE']
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.documentfile:documentfile:1.1.0'
+    implementation 'androidx.core:core:1.9.0'
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+    implementation 'com.google.android.material:material:1.13.0'
+    implementation 'com.google.firebase:firebase-database:20.3.1'
+    implementation 'com.google.firebase:firebase-auth:22.0.0'
+    implementation 'com.google.firebase:firebase-auth-interop:20.0.0'
+    implementation 'com.google.android.gms:play-services-base:18.2.0'
+    implementation 'com.google.android.gms:play-services-basement:18.2.0'
+    implementation 'com.google.android.gms:play-services-tasks:18.2.0'
+    implementation 'com.google.android.gms:play-services-auth:21.2.0'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.9'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0'
+    implementation 'com.squareup.okio:okio:3.6.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.11.0'
+    implementation 'com.google.oboe:oboe:1.8.1'
+
+    testImplementation 'junit:junit:4.13.2'
+}
