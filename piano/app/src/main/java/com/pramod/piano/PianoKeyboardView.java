@@ -57,10 +57,13 @@ public final class PianoKeyboardView extends View {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int fallbackHeight = Math.round(240f
+        int densityHeight = Math.round(240f
                 * getResources().getDisplayMetrics().density);
-        int height = resolveSize(fallbackHeight, heightMeasureSpec);
-        setMeasuredDimension(getKeyboardWidth(), height);
+        int desiredWidth = getKeyboardWidth();
+        int measuredHeight = resolveSize(densityHeight, heightMeasureSpec);
+        setMeasuredDimension(
+                desiredWidth,
+                measuredHeight > 0 ? measuredHeight : densityHeight);
     }
 
     @Override
@@ -169,7 +172,7 @@ public final class PianoKeyboardView extends View {
     }
 
     private float blackKeyCenterX(int whiteIndex) {
-        return (whiteIndex - 0.5f) * whiteKeyWidth;
+        return whiteIndex * whiteKeyWidth;
     }
 
     private int getWhiteKeyCount() {

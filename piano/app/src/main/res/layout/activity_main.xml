@@ -281,7 +281,7 @@
             <com.pramod.piano.PianoKeyboardView
                 android:id="@+id/pianoKeyboard"
                 android:layout_width="wrap_content"
-                android:layout_height="match_parent"
+                android:layout_height="240dp"
                 android:background="#FFF4F1E8" />
         </com.pramod.piano.LockableHorizontalScrollView>
     </LinearLayout>
