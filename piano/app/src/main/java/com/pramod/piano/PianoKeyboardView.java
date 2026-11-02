@@ -118,7 +118,7 @@ public final class PianoKeyboardView extends View {
         float blackKeyBottom = keybedTop + (keybedBottom - keybedTop) * blackKeyHeight;
         for (int note = LOWEST_NOTE; note <= HIGHEST_NOTE; note++) {
             if (isBlack(note)) {
-                float centerX = whiteIndex * whiteKeyWidth;
+                float centerX = blackKeyCenterX(whiteIndex);
                 float left = centerX - blackKeyWidth * 0.5f;
                 float right = centerX + blackKeyWidth * 0.5f;
                 paint.setStyle(Paint.Style.FILL);
@@ -166,7 +166,7 @@ public final class PianoKeyboardView extends View {
         if (y >= keybedTop && y <= blackKeyBottom) {
             for (int note = LOWEST_NOTE; note <= HIGHEST_NOTE; note++) {
                 if (isBlack(note)) {
-                    float centerX = whiteIndex * whiteKeyWidth;
+                    float centerX = blackKeyCenterX(whiteIndex);
                     if (Math.abs(x - centerX) <= blackKeyWidth * 0.5f) return note;
                 } else {
                     whiteIndex++;
@@ -180,6 +180,10 @@ public final class PianoKeyboardView extends View {
             if (!isBlack(note) && index++ == white) return note;
         }
         return HIGHEST_NOTE;
+    }
+
+    private float blackKeyCenterX(int whiteIndex) {
+        return (whiteIndex - 0.5f) * whiteKeyWidth;
     }
 
     private int getWhiteKeyCount() {
