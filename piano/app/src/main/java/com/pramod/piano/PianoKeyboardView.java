@@ -3,6 +3,9 @@ package com.pramod.piano;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.LinearGradient;
+import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.util.SparseIntArray;
 import android.view.MotionEvent;
@@ -53,43 +56,74 @@ public final class PianoKeyboardView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        int whiteIndex = 0;
+        float density = getResources().getDisplayMetrics().density;
         float height = getHeight();
+        float keybedTop = 5f * density;
+        float keybedBottom = height - 5f * density;
+        RectF casing = new RectF(0, 0, getWidth(), height);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setShader(new LinearGradient(0, 0, 0, height,
+                new int[]{0xFF363B43, 0xFF111419, 0xFF050608},
+                null, Shader.TileMode.CLAMP));
+        canvas.drawRoundRect(casing, 8f * density, 8f * density, paint);
+        paint.setShader(null);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(1f * density);
+        paint.setColor(0xFF737982);
+        canvas.drawRoundRect(casing, 8f * density, 8f * density, paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        int whiteIndex = 0;
         for (int note = LOWEST_NOTE; note <= HIGHEST_NOTE; note++) {
             if (isBlack(note)) continue;
             float left = whiteIndex * whiteKeyWidth;
             float right = left + whiteKeyWidth;
-            paint.setColor(isNotePressed(note) ? 0xFFBBD7FF : 0xFFFFFFFF);
+            float gap = Math.max(1f, density);
+            float keyBottom = keybedBottom - 2f * density;
+            paint.setShader(new LinearGradient(0, keybedTop, 0, keyBottom,
+                    isNotePressed(note)
+                            ? new int[]{0xFFE9F2FF, 0xFF9FC6FF, 0xFF6D9FE4}
+                            : new int[]{0xFFFFFFFF, 0xFFF9F8F3, 0xFFE6E2D9},
+                    null, Shader.TileMode.CLAMP));
             paint.setStyle(Paint.Style.FILL);
-            canvas.drawRect(left, 0, right, height, paint);
+            canvas.drawRoundRect(new RectF(left + gap, keybedTop, right - gap, keyBottom),
+                    2f * density, 2f * density, paint);
+            paint.setShader(null);
             paint.setColor(0xFF111827);
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(1f, getResources().getDisplayMetrics().density));
-            canvas.drawRect(left, 0, right, height, paint);
+            paint.setStrokeWidth(Math.max(1f, density));
+            canvas.drawRoundRect(new RectF(left + gap, keybedTop, right - gap, keyBottom),
+                    2f * density, 2f * density, paint);
             drawLabel(canvas, note, (left + right) * 0.5f,
-                    height - 10f * getResources().getDisplayMetrics().density,
+                    keyBottom - 10f * density,
                     0xFF111827, 9f);
             whiteIndex++;
         }
 
         whiteIndex = 0;
+        float blackKeyBottom = keybedTop + (keybedBottom - keybedTop) * blackKeyHeight;
         for (int note = LOWEST_NOTE; note <= HIGHEST_NOTE; note++) {
             if (isBlack(note)) {
-                float centerX = whiteIndex * whiteKeyWidth;
+                float centerX = whiteIndex * whiteKeyWidth - whiteKeyWidth * 0.5f;
                 float left = centerX - blackKeyWidth * 0.5f;
                 float right = centerX + blackKeyWidth * 0.5f;
-                float bottom = height * blackKeyHeight;
                 paint.setStyle(Paint.Style.FILL);
-                paint.setColor(isNotePressed(note) ? 0xFF3977C5 : 0xFF080B10);
-                float radius = 3f * getResources().getDisplayMetrics().density;
-                canvas.drawRoundRect(left, 0, right, bottom, radius, radius, paint);
-                paint.setColor(0xFF05080D);
+                paint.setShader(new LinearGradient(left, keybedTop, right, blackKeyBottom,
+                        isNotePressed(note)
+                                ? new int[]{0xFF83B7FA, 0xFF326CAC, 0xFF17457D}
+                                : new int[]{0xFF41464D, 0xFF15181D, 0xFF050608},
+                        null, Shader.TileMode.CLAMP));
+                float radius = 3f * density;
+                RectF blackKey = new RectF(left, keybedTop, right, blackKeyBottom);
+                canvas.drawRoundRect(blackKey, radius, radius, paint);
+                paint.setShader(null);
+                paint.setColor(0xFF050608);
                 paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(1f);
-                canvas.drawRoundRect(left, 0, right, bottom, radius, radius, paint);
+                paint.setStrokeWidth(Math.max(1f, density));
+                canvas.drawRoundRect(blackKey, radius, radius, paint);
                 drawLabel(canvas, note, centerX,
-                        bottom - 8f * getResources().getDisplayMetrics().density,
-                        0xFFFFFFFF, 7f);
+                        blackKeyBottom - 8f * density, 0xFFFFFFFF, 7f);
             } else {
                 whiteIndex++;
             }
@@ -111,11 +145,14 @@ public final class PianoKeyboardView extends View {
 
     private int noteAt(float x, float y) {
         int whiteIndex = 0;
-        float height = getHeight();
-        if (y <= height * blackKeyHeight) {
+        float density = getResources().getDisplayMetrics().density;
+        float keybedTop = 5f * density;
+        float blackKeyBottom = keybedTop
+                + (getHeight() - 10f * density) * blackKeyHeight;
+        if (y >= keybedTop && y <= blackKeyBottom) {
             for (int note = LOWEST_NOTE; note <= HIGHEST_NOTE; note++) {
                 if (isBlack(note)) {
-                    float centerX = whiteIndex * whiteKeyWidth;
+                    float centerX = whiteIndex * whiteKeyWidth - whiteKeyWidth * 0.5f;
                     if (Math.abs(x - centerX) <= blackKeyWidth * 0.5f) return note;
                 } else {
                     whiteIndex++;
