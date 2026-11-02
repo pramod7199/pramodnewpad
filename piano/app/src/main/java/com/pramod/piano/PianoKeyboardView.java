@@ -4,8 +4,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
-import android.graphics.LinearGradient;
-import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.util.SparseIntArray;
 import android.view.MotionEvent;
@@ -75,42 +73,33 @@ public final class PianoKeyboardView extends View {
         RectF casing = new RectF(0, 0, getWidth(), height);
 
         paint.setStyle(Paint.Style.FILL);
-        paint.setShader(new LinearGradient(0, 0, 0, height,
-                new int[]{0xFF363B43, 0xFF111419, 0xFF050608},
-                null, Shader.TileMode.CLAMP));
+        paint.setColor(0xFF090B0E);
         canvas.drawRoundRect(casing, 8f * density, 8f * density, paint);
-        paint.setShader(null);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f * density);
         paint.setColor(0xFF737982);
         canvas.drawRoundRect(casing, 8f * density, 8f * density, paint);
-        paint.setStyle(Paint.Style.FILL);
 
         int whiteIndex = 0;
         for (int note = LOWEST_NOTE; note <= HIGHEST_NOTE; note++) {
             if (isBlack(note)) continue;
             float left = whiteIndex * whiteKeyWidth;
             float right = left + whiteKeyWidth;
-            float gap = Math.max(1f, density);
             float keyBottom = keybedBottom - 2f * density;
-            paint.setShader(new LinearGradient(0, keybedTop, 0, keyBottom,
-                    isNotePressed(note)
-                            ? new int[]{0xFFD8E9FF, 0xFF76B0FF, 0xFF397FD8}
-                            : new int[]{0xFFFFFFFF, 0xFFF9F8F3, 0xFFE6E2D9},
-                    null, Shader.TileMode.CLAMP));
             paint.setStyle(Paint.Style.FILL);
-            canvas.drawRoundRect(new RectF(left + gap, keybedTop, right - gap, keyBottom),
-                    2f * density, 2f * density, paint);
-            paint.setShader(null);
-            paint.setColor(0xFF111827);
+            paint.setColor(isNotePressed(note) ? 0xFF8DBBFA : 0xFFF7F4EC);
+            canvas.drawRect(left + density, keybedTop, right - density, keyBottom, paint);
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(1f, density));
-            if (isNotePressed(note)) paint.setColor(0xFF1458A8);
-            canvas.drawRoundRect(new RectF(left + gap, keybedTop, right - gap, keyBottom),
-                    2f * density, 2f * density, paint);
+            paint.setStrokeWidth(density);
+            paint.setColor(isNotePressed(note) ? 0xFF174E91 : 0xFFAAA69E);
+            canvas.drawRect(left + density, keybedTop, right - density, keyBottom, paint);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0xFFD7D2C7);
+            canvas.drawRect(left + 2f * density, keyBottom - 3f * density,
+                    right - 2f * density, keyBottom, paint);
             drawLabel(canvas, note, (left + right) * 0.5f,
                     keyBottom - 10f * density,
-                    0xFF111827, 9f);
+                    0xFF111827, 10f);
             whiteIndex++;
         }
 
@@ -122,21 +111,18 @@ public final class PianoKeyboardView extends View {
                 float left = centerX - blackKeyWidth * 0.5f;
                 float right = centerX + blackKeyWidth * 0.5f;
                 paint.setStyle(Paint.Style.FILL);
-                paint.setShader(new LinearGradient(left, keybedTop, right, blackKeyBottom,
-                        isNotePressed(note)
-                                ? new int[]{0xFF9CCBFF, 0xFF347FD4, 0xFF17457D}
-                                : new int[]{0xFF41464D, 0xFF15181D, 0xFF050608},
-                        null, Shader.TileMode.CLAMP));
-                float radius = 3f * density;
+                paint.setColor(isNotePressed(note) ? 0xFF397FD8 : 0xFF111318);
                 RectF blackKey = new RectF(left, keybedTop, right, blackKeyBottom);
-                canvas.drawRoundRect(blackKey, radius, radius, paint);
-                paint.setShader(null);
-                paint.setColor(isNotePressed(note) ? 0xFFC6E1FF : 0xFF050608);
+                canvas.drawRoundRect(blackKey, 3f * density, 3f * density, paint);
+                paint.setColor(isNotePressed(note) ? 0xFF9DC8FF : 0xFF030405);
+                canvas.drawRect(left + density, keybedTop + 3f * density,
+                        right - density, blackKeyBottom - 2f * density, paint);
                 paint.setStyle(Paint.Style.STROKE);
+                paint.setColor(isNotePressed(note) ? 0xFFC6E1FF : 0xFF050608);
                 paint.setStrokeWidth((isNotePressed(note) ? 2f : 1f) * density);
-                canvas.drawRoundRect(blackKey, radius, radius, paint);
+                canvas.drawRoundRect(blackKey, 3f * density, 3f * density, paint);
                 drawLabel(canvas, note, centerX,
-                        blackKeyBottom - 8f * density, 0xFFFFFFFF, 7f);
+                        blackKeyBottom - 8f * density, 0xFFFFFFFF, 8f);
             } else {
                 whiteIndex++;
             }

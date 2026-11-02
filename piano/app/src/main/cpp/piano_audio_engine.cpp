@@ -172,10 +172,24 @@ public:
         if (synth_) fluid_synth_pitch_bend(synth_, channel, value);
     }
 
+    void setMasterVolume(float volume) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        targetMasterVolume_ = std::clamp(volume, 0.0f, 1.0f);
+    }
+
+    void setEqualizer(float lowDb, float midDb, float highDb) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        constexpr float dbScale = 0.11512925465f;
+        targetEqGains_[0] = std::pow(10.0f, std::clamp(lowDb, -12.0f, 12.0f) * dbScale);
+        targetEqGains_[1] = std::pow(10.0f, std::clamp(midDb, -12.0f, 12.0f) * dbScale);
+        targetEqGains_[2] = std::pow(10.0f, std::clamp(highDb, -12.0f, 12.0f) * dbScale);
+    }
+
     oboe::DataCallbackResult onAudioReady(
             oboe::AudioStream* stream, void* audioData, int32_t frames) override {
         auto* output = static_cast<float*>(audioData);
         std::lock_guard<std::mutex> lock(mutex_);
+        const float outputRate = static_cast<float>(stream->getSampleRate());
         if (!synth_) {
             std::fill(output, output + frames * 2, 0.0f);
         } else {
@@ -192,43 +206,70 @@ public:
             }
         }
 
-        if (!sampleMode_ || samplePcm_.empty()) return oboe::DataCallbackResult::Continue;
-        const double outputRate = stream->getSampleRate();
-        const double releaseStep = 1.0 / (outputRate * 0.015);
-        const size_t frameCount = samplePcm_.size() / static_cast<size_t>(sampleChannels_);
-        for (auto& voice : sampleVoices_) {
-            if (!voice.active) continue;
-            const double bendSemitones =
-                    (pitchBend_[static_cast<size_t>(voice.channel)] - 8192) * (2.0 / 8192.0);
-            const double rate = (sampleRate_ / outputRate)
-                    * std::pow(2.0, (voice.note - 60 + bendSemitones) / 12.0);
-            for (int32_t i = 0; i < frames; ++i) {
-                const size_t sourceFrame = static_cast<size_t>(voice.position);
-                if (sourceFrame >= frameCount) {
-                    voice.active = false;
-                    break;
-                }
-                const size_t nextFrame = std::min(sourceFrame + 1, frameCount - 1);
-                const float fraction = static_cast<float>(voice.position - sourceFrame);
-                const size_t first = sourceFrame * static_cast<size_t>(sampleChannels_);
-                const size_t second = nextFrame * static_cast<size_t>(sampleChannels_);
-                const float sampleLeft = samplePcm_[first] * (1.0f - fraction)
-                        + samplePcm_[second] * fraction;
-                const float sampleRight = sampleChannels_ == 1 ? sampleLeft
-                        : samplePcm_[first + 1] * (1.0f - fraction)
-                        + samplePcm_[second + 1] * fraction;
-                const float envelope = voice.gain * voice.release;
-                output[i * 2] = std::clamp(output[i * 2] + sampleLeft * envelope, -1.0f, 1.0f);
-                output[i * 2 + 1] = std::clamp(
-                        output[i * 2 + 1] + sampleRight * envelope, -1.0f, 1.0f);
-                voice.position += rate;
-                if (voice.releasing) {
-                    voice.release -= static_cast<float>(releaseStep);
-                    if (voice.release <= 0.0f) {
+        if (sampleMode_ && !samplePcm_.empty()) {
+            const double releaseStep = 1.0 / (outputRate * 0.015);
+            const size_t frameCount = samplePcm_.size()
+                    / static_cast<size_t>(sampleChannels_);
+            for (auto& voice : sampleVoices_) {
+                if (!voice.active) continue;
+                const double bendSemitones =
+                        (pitchBend_[static_cast<size_t>(voice.channel)] - 8192)
+                        * (2.0 / 8192.0);
+                const double rate = (sampleRate_ / outputRate)
+                        * std::pow(2.0, (voice.note - 60 + bendSemitones) / 12.0);
+                for (int32_t i = 0; i < frames; ++i) {
+                    const size_t sourceFrame = static_cast<size_t>(voice.position);
+                    if (sourceFrame >= frameCount) {
                         voice.active = false;
                         break;
                     }
+                    const size_t nextFrame = std::min(sourceFrame + 1, frameCount - 1);
+                    const float fraction = static_cast<float>(voice.position - sourceFrame);
+                    const size_t first = sourceFrame * static_cast<size_t>(sampleChannels_);
+                    const size_t second = nextFrame * static_cast<size_t>(sampleChannels_);
+                    const float sampleLeft = samplePcm_[first] * (1.0f - fraction)
+                            + samplePcm_[second] * fraction;
+                    const float sampleRight = sampleChannels_ == 1 ? sampleLeft
+                            : samplePcm_[first + 1] * (1.0f - fraction)
+                            + samplePcm_[second + 1] * fraction;
+                    const float envelope = voice.gain * voice.release;
+                    output[i * 2] += sampleLeft * envelope;
+                    output[i * 2 + 1] += sampleRight * envelope;
+                    voice.position += rate;
+                    if (voice.releasing) {
+                        voice.release -= static_cast<float>(releaseStep);
+                        if (voice.release <= 0.0f) {
+                            voice.active = false;
+                            break;
+                        }
+                    }
                 }
+            }
+        }
+
+        constexpr float pi = 3.14159265358979323846f;
+        const float lowAlpha = 1.0f - std::exp(-2.0f * pi
+                * 250.0f / outputRate);
+        const float highAlpha = 1.0f - std::exp(-2.0f * pi
+                * 4000.0f / outputRate);
+        constexpr float controlSmoothing = 0.002f;
+        for (int32_t i = 0; i < frames; ++i) {
+            masterVolume_ += (targetMasterVolume_ - masterVolume_) * controlSmoothing;
+            for (size_t band = 0; band < eqGains_.size(); ++band) {
+                eqGains_[band] += (targetEqGains_[band] - eqGains_[band])
+                        * controlSmoothing;
+            }
+            for (size_t channel = 0; channel < 2; ++channel) {
+                const size_t sampleIndex = static_cast<size_t>(i) * 2 + channel;
+                const float input = output[sampleIndex];
+                lowPassState_[channel] += lowAlpha * (input - lowPassState_[channel]);
+                highPassState_[channel] += highAlpha * (input - highPassState_[channel]);
+                const float low = lowPassState_[channel];
+                const float mid = highPassState_[channel] - low;
+                const float high = input - highPassState_[channel];
+                const float equalized = low * eqGains_[0] + mid * eqGains_[1]
+                        + high * eqGains_[2];
+                output[sampleIndex] = std::clamp(equalized * masterVolume_, -1.0f, 1.0f);
             }
         }
         return oboe::DataCallbackResult::Continue;
@@ -245,6 +286,12 @@ private:
     std::vector<float> samplePcm_;
     std::array<SampleVoice, 64> sampleVoices_{};
     std::array<int, 16> pitchBend_{};
+    std::array<float, 2> lowPassState_{};
+    std::array<float, 2> highPassState_{};
+    std::array<float, 3> targetEqGains_{1.0f, 1.0f, 1.0f};
+    std::array<float, 3> eqGains_{1.0f, 1.0f, 1.0f};
+    float targetMasterVolume_ = 0.8f;
+    float masterVolume_ = 0.8f;
     int sampleRate_ = 0;
     int sampleChannels_ = 0;
     bool sampleMode_ = false;
@@ -326,4 +373,18 @@ Java_com_pramod_piano_MainActivity_nativePitchBend(
         JNIEnv*, jobject, jint channel, jint value) {
     std::lock_guard<std::mutex> lock(gEngineMutex);
     if (gEngine) gEngine->pitchBend(channel, value);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_pramod_piano_MainActivity_nativeSetMasterVolume(
+        JNIEnv*, jobject, jfloat volume) {
+    std::lock_guard<std::mutex> lock(gEngineMutex);
+    if (gEngine) gEngine->setMasterVolume(volume);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_pramod_piano_MainActivity_nativeSetEqualizer(
+        JNIEnv*, jobject, jfloat lowDb, jfloat midDb, jfloat highDb) {
+    std::lock_guard<std::mutex> lock(gEngineMutex);
+    if (gEngine) gEngine->setEqualizer(lowDb, midDb, highDb);
 }

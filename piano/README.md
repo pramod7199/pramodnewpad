@@ -14,6 +14,9 @@ Standalone landscape Android piano/keyboard starter project.
 - SF2 file picker using Android's Storage Access Framework, with GM programs.
 - Vertical pitch bender on the left that returns to center when released.
 - Octave transpose and keyboard scroll lock controls.
+- Black instrument fascia with an LCD-style active-instrument display.
+- Master output volume and a three-band low/mid/high equalizer applied to both
+  SoundFont and bundled-sample audio.
 - Google sign-in with access gated by `authorizedUsers/{uid}/allowedApps/piano`.
 
 The bundled samples are decoded on selection and played through the Oboe audio

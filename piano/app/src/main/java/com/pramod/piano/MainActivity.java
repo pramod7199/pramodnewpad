@@ -14,6 +14,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -55,6 +56,9 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
     private TextView status;
     private TextView activeInstrument;
     private TextView octaveLabel;
+    private TextView masterVolumeLabel;
+    private final TextView[] eqLabels = new TextView[3];
+    private final float[] eqValues = new float[3];
     private boolean engineReady;
     private boolean soundFontLoaded;
     private boolean presetReady;
@@ -73,6 +77,8 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
     private native void nativeNoteOn(int channel, int note, int velocity);
     private native void nativeNoteOff(int channel, int note);
     private native void nativePitchBend(int channel, int value);
+    private native void nativeSetMasterVolume(float volume);
+    private native void nativeSetEqualizer(float lowDb, float midDb, float highDb);
 
     @Override
     protected void onCreate(Bundle state) {
@@ -96,12 +102,15 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
         setupChordButtons();
         setupSoundFontPicker();
         setupOctaveAndScrollLock();
+        setupAudioControls();
 
         engineReady = nativeCreate();
         if (!engineReady) {
             status.setText("Audio engine failed to start");
             Toast.makeText(this, "Could not start Oboe / FluidSynth", Toast.LENGTH_LONG).show();
         } else {
+            nativeSetMasterVolume(0.8f);
+            nativeSetEqualizer(0f, 0f, 0f);
             loadBundledInstrumentPresets();
         }
     }
@@ -148,6 +157,59 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
             lockButton.setText(locked ? "SCROLL LOCKED" : "SCROLL UNLOCKED");
             status.setText(locked ? "Keyboard scroll locked" : "Keyboard scroll unlocked");
         });
+    }
+
+    private void setupAudioControls() {
+        SeekBar volume = findViewById(R.id.seekMasterVolume);
+        masterVolumeLabel = findViewById(R.id.txtMasterVolume);
+        volume.setMax(100);
+        volume.setProgress(80);
+        volume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                masterVolumeLabel.setText(progress + "%");
+                if (engineReady) nativeSetMasterVolume(progress / 100f);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+
+        int[] seekIds = {R.id.seekEqLow, R.id.seekEqMid, R.id.seekEqHigh};
+        int[] labelIds = {R.id.txtEqLow, R.id.txtEqMid, R.id.txtEqHigh};
+        for (int band = 0; band < seekIds.length; band++) {
+            final int index = band;
+            SeekBar equalizer = findViewById(seekIds[band]);
+            eqLabels[band] = findViewById(labelIds[band]);
+            equalizer.setMax(24);
+            equalizer.setProgress(12);
+            equalizer.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    eqValues[index] = progress - 12f;
+                    eqLabels[index].setText(String.format(
+                            java.util.Locale.US, "%+.0f dB", eqValues[index]));
+                    if (engineReady) applyEqualizer();
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                }
+            });
+        }
+    }
+
+    private void applyEqualizer() {
+        nativeSetEqualizer(eqValues[0], eqValues[1], eqValues[2]);
     }
 
     private void changeOctave(int direction) {
