@@ -4125,7 +4125,7 @@ public class LoopsActivity extends Activity implements DialogInterface.OnClickLi
         root.addView(title);
 
         android.widget.TextView sub = new android.widget.TextView(this);
-        sub.setText("LEARN dabao → Roland SPD-20 Pro ka button dabao → auto-map! ✅");
+        sub.setText("LEARN dabao → Pramod SPD-20 Pro ka button dabao → auto-map! ✅");
         sub.setTextColor(0xFFAAAAAA);
         sub.setTextSize(10f);
         sub.setPadding(0, 4, 0, 14);
@@ -4703,7 +4703,7 @@ public class LoopsActivity extends Activity implements DialogInterface.OnClickLi
 
         // Title
         android.widget.TextView title = new android.widget.TextView(this);
-        title.setText("🎛️ MIDI CC Settings (Roland SPD-20 Pro)");
+        title.setText("🎛️ MIDI CC Settings (Pramod SPD-20 Pro)");
         title.setTextColor(0xFFFFCC00);
         title.setTextSize(15f);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -5539,7 +5539,7 @@ public class LoopsActivity extends Activity implements DialogInterface.OnClickLi
         updateModeButtonsUI();
         if (this.txtLoopStatus != null) {
             this.txtLoopStatus.setText(isDrum
-                ? "🥁 DRUM MODE — tap any pad to hit (Roland SPD-SX Pro style)"
+                ? "🥁 DRUM MODE — tap any pad to hit (Pramod SPD-SX Pro style)"
                 : "🔁 LOOP MODE — tap pad to start/stop loop");
         }
     }

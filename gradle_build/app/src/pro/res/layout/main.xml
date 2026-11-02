@@ -1,121 +1,87 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:id="@+id/rootMain" android:background="@drawable/spd20_chassis" android:padding="12dp" android:layout_width="match_parent" android:layout_height="match_parent">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:id="@+id/rootMain" android:background="@drawable/spd20_chassis" android:padding="8dp" android:layout_width="match_parent" android:layout_height="match_parent">
     <LinearLayout
         android:id="@+id/topControlBar"
         android:layout_width="match_parent"
-        android:layout_height="112dp"
+        android:layout_height="wrap_content"
         android:background="@drawable/spd20_fascia"
-        android:orientation="horizontal"
-        android:padding="5dp">
+        android:orientation="vertical"
+        android:padding="4dp">
 
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1.1"
-            android:orientation="vertical"
-            android:paddingRight="5dp">
+            android:id="@+id/topPanelHeader"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="62dp"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1.45"
-                    android:gravity="center_vertical"
-                    android:orientation="vertical"
-                    android:paddingLeft="4dp">
-
-                    <TextView
-                        android:id="@+id/txtBrand"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="Roland"
-                        android:textColor="#ffffffff"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="OCTAPAD SPD-20 PRO"
-                        android:textColor="#ffd9dadd"
-                        android:textSize="9sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txtMidiStatus"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="MIDI: disconnected"
-                        android:textColor="#ff8bd49a"
-                        android:textSize="8sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
+                android:orientation="vertical"
+                android:paddingLeft="4dp">
 
                 <TextView
-                    android:id="@+id/txtSelectedPad"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_marginLeft="3dp"
-                    android:layout_weight="0.8"
-                    android:background="@drawable/spd20_number_display"
+                    android:id="@+id/txtBrand"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:gravity="center"
-                    android:maxLines="2"
-                    android:padding="2dp"
-                    android:text="PAD 1"
-                    android:textColor="#ffff2833"
+                    android:maxLines="1"
+                    android:text="Pramod"
+                    android:textColor="#ffffffff"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="OCTAPAD SPD-20 PRO"
+                    android:textColor="#ffd9dadd"
                     android:textSize="8sp"
                     android:textStyle="bold" />
 
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_marginLeft="4dp"
-                    android:layout_weight="2.05"
-                    android:background="@drawable/lcd_pro"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:padding="3dp">
+                <TextView
+                    android:id="@+id/txtMidiStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="MIDI: disconnected"
+                    android:textColor="#ff8bd49a"
+                    android:textSize="7sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="KIT"
-                        android:textColor="#ffd8e4ee"
-                        android:textSize="8sp"
-                        android:textStyle="bold" />
+            <TextView
+                android:id="@+id/txtSelectedPad"
+                android:layout_width="34dp"
+                android:layout_height="38dp"
+                android:layout_marginLeft="3dp"
+                android:background="@drawable/spd20_number_display"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="2"
+                android:padding="1dp"
+                android:text="PAD 1"
+                android:textColor="#ffff2833"
+                android:textSize="6sp"
+                android:textStyle="bold" />
 
-                    <TextView
-                        android:id="@+id/txtKitName"
-                        android:layout_width="match_parent"
-                        android:layout_height="0dp"
-                        android:layout_weight="1"
-                        android:ellipsize="end"
-                        android:gravity="center_vertical"
-                        android:maxLines="1"
-                        android:paddingLeft="2dp"
-                        android:paddingRight="2dp"
-                        android:text="001: KIT 1"
-                        android:textColor="#ffe4f2ff"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1.75"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingLeft="5dp"
+                android:paddingRight="5dp">
 
                 <Button
                     android:id="@+id/btnPrevKit"
-                    android:layout_width="0dp"
+                    android:layout_width="42dp"
                     android:layout_height="38dp"
-                    android:layout_marginLeft="4dp"
-                    android:layout_weight="0.72"
                     android:background="@drawable/spd20_red_button"
                     android:minWidth="0dp"
                     android:text="−"
@@ -123,12 +89,28 @@
                     android:textSize="22sp"
                     android:textStyle="bold" />
 
+                <TextView
+                    android:id="@+id/txtKitName"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_marginLeft="4dp"
+                    android:layout_marginRight="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/lcd_pro"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:paddingLeft="4dp"
+                    android:paddingRight="4dp"
+                    android:text="KIT 1"
+                    android:textColor="#ffe4f2ff"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
                 <Button
                     android:id="@+id/btnNextKit"
-                    android:layout_width="0dp"
+                    android:layout_width="42dp"
                     android:layout_height="38dp"
-                    android:layout_marginLeft="3dp"
-                    android:layout_weight="0.72"
                     android:background="@drawable/spd20_red_button"
                     android:minWidth="0dp"
                     android:text="+"
@@ -138,26 +120,27 @@
             </LinearLayout>
 
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="38dp"
-                android:layout_marginTop="2dp"
-                android:orientation="horizontal">
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1.18"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="4dp"
+                android:paddingRight="2dp">
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:gravity="center"
-                    android:orientation="vertical"
-                    android:paddingLeft="4dp"
-                    android:paddingRight="4dp">
+                    android:orientation="vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="VOLUME"
+                        android:text="VOL"
                         android:textColor="#ffe1e3e5"
-                        android:textSize="8sp"
+                        android:textSize="7sp"
                         android:textStyle="bold" />
 
                     <SeekBar
@@ -166,8 +149,8 @@
                         android:layout_height="wrap_content"
                         android:max="100"
                         android:progressBackgroundTint="#ff55595c"
-                        android:progressTint="#ff8fb8cd"
-                        android:thumbTint="#ffe8f0f3" />
+                        android:progressTint="#ff168bff"
+                        android:thumbTint="#ff73c8ff" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -175,16 +158,14 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:gravity="center"
-                    android:orientation="vertical"
-                    android:paddingLeft="4dp"
-                    android:paddingRight="4dp">
+                    android:orientation="vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="PITCH"
                         android:textColor="#ffe1e3e5"
-                        android:textSize="8sp"
+                        android:textSize="7sp"
                         android:textStyle="bold" />
 
                     <SeekBar
@@ -193,29 +174,21 @@
                         android:layout_height="wrap_content"
                         android:max="150"
                         android:progressBackgroundTint="#ff55595c"
-                        android:progressTint="#ff8fb8cd"
-                        android:thumbTint="#ffe8f0f3" />
+                        android:progressTint="#ff168bff"
+                        android:thumbTint="#ff73c8ff" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 
-        <View
-            android:layout_width="1dp"
-            android:layout_height="match_parent"
-            android:layout_marginLeft="3dp"
-            android:layout_marginRight="4dp"
-            android:background="#ff73777a" />
-
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1.55"
+            android:id="@+id/topPanelDetails"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
             android:orientation="vertical">
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_height="27dp"
                 android:orientation="horizontal">
 
                 <LinearLayout style="@style/ProPanelCell">
@@ -250,8 +223,7 @@
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_height="27dp"
                 android:orientation="horizontal">
 
                 <LinearLayout style="@style/ProPanelCell">
@@ -313,16 +285,16 @@
         <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
             <LinearLayout android:gravity="center" android:orientation="vertical" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
                 <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ATTACK"/>
-                <SeekBar android:id="@+id/seekAttack" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500"/>
+                <SeekBar android:id="@+id/seekAttack" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500" android:progressTint="#ff168bff" android:thumbTint="#ff168bff"/>
             </LinearLayout>
             <LinearLayout android:gravity="center" android:orientation="vertical" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
                 <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="RELEASE"/>
-                <SeekBar android:id="@+id/seekRelease" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500"/>
+                <SeekBar android:id="@+id/seekRelease" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="500" android:progressTint="#ff168bff" android:thumbTint="#ff168bff"/>
             </LinearLayout>
             <View android:background="#ff444444" android:layout_width="1dp" android:layout_height="match_parent" android:layout_margin="4dp"/>
             <LinearLayout android:gravity="center" android:orientation="vertical" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
                 <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="CHOKE GRP"/>
-                <SeekBar android:id="@+id/seekChokeGroup" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="4"/>
+                <SeekBar android:id="@+id/seekChokeGroup" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="4" android:progressTint="#ff168bff" android:thumbTint="#ff168bff"/>
             </LinearLayout>
             <Button android:textSize="10sp" android:textColor="#ffffffff" android:id="@+id/btnPadColor" android:background="#ff333333" android:layout_width="0dp" android:layout_height="match_parent" android:text="COLOR" android:layout_weight="1"/>
             <!-- Sign-in info moved from accountRow into ADV bar — pads get full height -->
@@ -334,9 +306,9 @@
         <!-- Master Volume + Master Pitch — inside ADV panel so pads stay full-size -->
         <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:background="#ff000000" android:padding="2dp" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
             <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="#ff00ff00" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="4dp" android:text="M-VOL"/>
-            <SeekBar android:id="@+id/seekMasterVolume" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginLeft="4dp" android:layout_marginRight="8dp" android:max="100"/>
+            <SeekBar android:id="@+id/seekMasterVolume" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginLeft="4dp" android:layout_marginRight="8dp" android:max="100" android:progressTint="#ff168bff" android:thumbTint="#ff168bff"/>
             <TextView android:textSize="9sp" android:textStyle="bold" android:textColor="#ff00ff00" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="M-PITCH"/>
-            <SeekBar android:id="@+id/seekMasterPitch" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginLeft="4dp" android:layout_marginRight="4dp" android:max="200"/>
+            <SeekBar android:id="@+id/seekMasterPitch" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginLeft="4dp" android:layout_marginRight="4dp" android:max="200" android:progressTint="#ff168bff" android:thumbTint="#ff168bff"/>
         </LinearLayout>
     </LinearLayout>
     <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@+id/titleBar" android:background="@drawable/panel_pro" android:padding="6dp" android:layout_width="match_parent" android:layout_height="40dp" android:layout_marginTop="4dp" android:visibility="gone">
@@ -344,31 +316,31 @@
         <Button android:id="@+id/btnStopLoop" android:textSize="12sp" android:textStyle="bold" android:textColor="#ffffffff" android:background="@drawable/btn_3d_red" android:layout_width="wrap_content" android:layout_height="match_parent" android:layout_marginLeft="8dp" android:text="STOP" android:onClick="onStopLoopClick"/>
     </LinearLayout>
     <!-- Favorite Kit Bank (MainActivity): tap = switch, long-press = save -->
-    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@+id/favDrumRow" android:background="#ffe5e3de" android:padding="2dp" android:layout_width="match_parent" android:layout_height="28dp">
-        <TextView android:textSize="8sp" android:textStyle="bold" android:textColor="#ff292d30" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="3dp" android:text="FAV KITS"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum1" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·1" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum2" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·2" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum3" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·3" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum4" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·4" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum5" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·5" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum6" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·6" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum7" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·7" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum8" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·8" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum9" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="·9" android:layout_weight="1"/>
-        <Button android:textSize="10sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum10" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="3dp" android:text="10" android:layout_weight="1"/>
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@+id/favDrumRow" android:background="#ffe5e3de" android:padding="1dp" android:layout_width="match_parent" android:layout_height="22dp">
+        <TextView android:textSize="7sp" android:textStyle="bold" android:textColor="#ff292d30" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginLeft="2dp" android:text="FAV"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum1" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·1" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum2" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·2" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum3" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·3" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum4" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·4" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum5" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·5" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum6" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·6" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum7" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·7" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum8" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·8" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum9" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="·9" android:layout_weight="1"/>
+        <Button android:textSize="8sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/favDrum10" android:background="@drawable/btn_3d_dark" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginLeft="2dp" android:text="10" android:layout_weight="1"/>
     </LinearLayout>
-    <LinearLayout android:orientation="vertical" android:id="@+id/padArea" android:background="@drawable/spd20_padbed" android:padding="8dp" android:layout_width="match_parent" android:layout_height="0dp" android:layout_marginTop="6dp" android:layout_weight="2">
+    <LinearLayout android:orientation="vertical" android:id="@+id/padArea" android:background="@drawable/spd20_padbed" android:padding="5dp" android:layout_width="match_parent" android:layout_height="0dp" android:layout_marginTop="4dp" android:layout_weight="2">
         <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
-            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/pad1" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="5dp" android:text="PAD 1" android:layout_weight="1"/>
-            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/pad2" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="5dp" android:text="PAD 2" android:layout_weight="1"/>
-            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/pad3" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="5dp" android:text="PAD 3" android:layout_weight="1"/>
-            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/pad4" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="5dp" android:text="PAD 4" android:layout_weight="1"/>
+            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ff25292b" android:id="@+id/pad1" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:text="PAD 1" android:layout_weight="1"/>
+            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ff25292b" android:id="@+id/pad2" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:text="PAD 2" android:layout_weight="1"/>
+            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ff25292b" android:id="@+id/pad3" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:text="PAD 3" android:layout_weight="1"/>
+            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ff25292b" android:id="@+id/pad4" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:text="PAD 4" android:layout_weight="1"/>
         </LinearLayout>
         <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
-            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/pad5" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="5dp" android:text="PAD 5" android:layout_weight="1"/>
-            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/pad6" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="5dp" android:text="PAD 6" android:layout_weight="1"/>
-            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/pad7" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="5dp" android:text="PAD 7" android:layout_weight="1"/>
-            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ffffffff" android:id="@+id/pad8" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="5dp" android:text="PAD 8" android:layout_weight="1"/>
+            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ff25292b" android:id="@+id/pad5" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:text="PAD 5" android:layout_weight="1"/>
+            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ff25292b" android:id="@+id/pad6" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:text="PAD 6" android:layout_weight="1"/>
+            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ff25292b" android:id="@+id/pad7" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:text="PAD 7" android:layout_weight="1"/>
+            <Button android:textSize="18sp" android:textStyle="bold" android:textColor="#ff25292b" android:id="@+id/pad8" android:background="@drawable/pad_black_selector" android:layout_width="0dp" android:layout_height="match_parent" android:layout_margin="2dp" android:text="PAD 8" android:layout_weight="1"/>
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

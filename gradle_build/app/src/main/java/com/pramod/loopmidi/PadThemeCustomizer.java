@@ -76,6 +76,7 @@ final class PadThemeCustomizer {
     private final SharedPreferences preferences;
     private final Button[] pads;
     private final View root;
+    private final Drawable baseRootBackground;
     private final View[] backgroundSurfaces;
     private final Drawable[] baseSurfaceBackgrounds;
     private final Button[] toggleButtons;
@@ -93,6 +94,7 @@ final class PadThemeCustomizer {
         this.preferences = preferences;
         this.pads = pads;
         this.root = root;
+        this.baseRootBackground = cloneDrawable(root.getBackground());
         int[] surfaceIds = {R.id.topControlBar, R.id.fxControlBar, R.id.advControlBar,
                 R.id.favDrumRow, R.id.titleBar, R.id.padArea};
         backgroundSurfaces = new View[surfaceIds.length];
@@ -110,6 +112,10 @@ final class PadThemeCustomizer {
                 R.id.btnCCCtrl};
         java.util.ArrayList<Button> foundToggles = new java.util.ArrayList<>();
         for (int toggleId : toggleIds) {
+            if (BuildConfig.FLAVOR.equals("pro")
+                    && (toggleId == R.id.btnPrevKit || toggleId == R.id.btnNextKit)) {
+                continue;
+            }
             Button toggle = root.findViewById(toggleId);
             if (toggle != null) {
                 foundToggles.add(toggle);
@@ -441,7 +447,9 @@ final class PadThemeCustomizer {
     }
 
     private void applyPadImage(int padIndex) {
-        pads[padIndex].setTextColor(preferences.getInt(KEY_PRESET, 0) == 3
+        int preset = preferences.getInt(KEY_PRESET, 0);
+        pads[padIndex].setTextColor(preset == 3
+                || (BuildConfig.FLAVOR.equals("pro") && preset == 0)
                 ? 0xFF172033 : Color.WHITE);
         Drawable base = createPadBase();
         String uriText = preferences.getString(KEY_PAD_IMAGE + padIndex, null);
@@ -472,7 +480,12 @@ final class PadThemeCustomizer {
     private void applyGlobalBackground() {
         String uriText = preferences.getString(KEY_BACKGROUND_IMAGE, null);
         if (uriText == null) {
-            root.setBackgroundColor(presetRootColor());
+            if (BuildConfig.FLAVOR.equals("pro")
+                    && preferences.getInt(KEY_PRESET, 0) == 0) {
+                root.setBackground(cloneDrawable(baseRootBackground));
+            } else {
+                root.setBackgroundColor(presetRootColor());
+            }
             applyPresetSurfaceBackgrounds();
             return;
         }
@@ -493,7 +506,12 @@ final class PadThemeCustomizer {
                 editor.remove(KEY_COMBINED_IMAGE);
             }
             editor.apply();
-            root.setBackgroundColor(presetRootColor());
+            if (BuildConfig.FLAVOR.equals("pro")
+                    && preferences.getInt(KEY_PRESET, 0) == 0) {
+                root.setBackground(cloneDrawable(baseRootBackground));
+            } else {
+                root.setBackgroundColor(presetRootColor());
+            }
             applyPresetSurfaceBackgrounds();
             applyTogglePhoto();
             Toast.makeText(activity, "Saved background image is unavailable",
@@ -537,7 +555,9 @@ final class PadThemeCustomizer {
             combined.setLayerInset(1, dp(1), dp(1), dp(1), dp(4));
             button.setBackground(combined);
         }
-        button.setTextColor(preset == 3 ? 0xFF172033 : Color.WHITE);
+        button.setTextColor(preset == 3
+                || (BuildConfig.FLAVOR.equals("pro") && preset == 0 && !isOn)
+                ? 0xFF172033 : Color.WHITE);
     }
 
     private void applyFavoriteButtons() {
@@ -564,7 +584,9 @@ final class PadThemeCustomizer {
         } else {
             button.setBackground(style);
         }
-        button.setTextColor(preset == 3 ? 0xFF172033 : Color.WHITE);
+        button.setTextColor(preset == 3
+                || (BuildConfig.FLAVOR.equals("pro") && preset == 0 && !favoriteFilled[index])
+                ? 0xFF172033 : Color.WHITE);
     }
 
     private Drawable createRaisedButton(int preset, boolean filled, int radiusDp, int depthDp,
@@ -706,6 +728,10 @@ final class PadThemeCustomizer {
     }
 
     private int[] padSelectorColors(int preset) {
+        if (preset == 0 && BuildConfig.FLAVOR.equals("pro")) {
+            return new int[]{0xFFEAF3FA, 0xFFDCE8F0, 0xFFC9D8E2, 0xFF168BFF,
+                    0xFFFFFFFF, 0xFFF4F7F9, 0xFFE0E5E8, 0xFF9AA8AF};
+        }
         switch (preset) {
             case 1:
                 return new int[]{0xFF087E91, 0xFF0A6573, 0xFF06424F, 0xFF83F4FF,

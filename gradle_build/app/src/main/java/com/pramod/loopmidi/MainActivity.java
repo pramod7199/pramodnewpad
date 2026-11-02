@@ -72,6 +72,11 @@ public class MainActivity extends Activity {
     public static volatile MainActivity globalInstance = null;
 
     private View advControlBar;
+    private float proPanelSwipeStartX;
+    private float proPanelSwipeStartY;
+    private boolean proPanelSwipeTracking;
+    private boolean proPanelSwipeIntercepted;
+    private boolean proPanelCollapsed;
     private AudioEngine.SampleData assistSoundId;
     private Uri assistSoundUri;
     private AudioEngine audioEngine;
@@ -699,7 +704,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         android.widget.TextView sub = new android.widget.TextView(this);
-        sub.setText("LEARN dabao → Roland SPD-20 Pro ka button dabao → auto-map! ✅");
+        sub.setText("LEARN dabao → Pramod SPD-20 Pro ka button dabao → auto-map! ✅");
         sub.setTextColor(0xFFAAAAAA);
         sub.setTextSize(10f);
         sub.setPadding(0, 4, 0, 14);
@@ -1581,7 +1586,144 @@ public class MainActivity extends Activity {
         }
     }
 
-    @Override // android.app.Activity
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (!BuildConfig.FLAVOR.equals("pro")) {
+            return super.dispatchTouchEvent(event);
+        }
+
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            proPanelSwipeTracking = isPointInsideProPanel(event.getRawX(), event.getRawY());
+            proPanelSwipeIntercepted = false;
+            proPanelSwipeStartX = event.getRawX();
+            proPanelSwipeStartY = event.getRawY();
+        } else if (proPanelSwipeTracking && !proPanelSwipeIntercepted
+                && action == MotionEvent.ACTION_MOVE) {
+            float deltaX = event.getRawX() - proPanelSwipeStartX;
+            float deltaY = event.getRawY() - proPanelSwipeStartY;
+            int swipeThreshold = Math.max(
+                    android.view.ViewConfiguration.get(this).getScaledTouchSlop() * 2,
+                    dp(28));
+            if (Math.abs(deltaY) >= swipeThreshold
+                    && Math.abs(deltaY) > Math.abs(deltaX) * 1.25f) {
+                proPanelSwipeIntercepted = true;
+                MotionEvent cancel = MotionEvent.obtain(event);
+                cancel.setAction(MotionEvent.ACTION_CANCEL);
+                super.dispatchTouchEvent(cancel);
+                cancel.recycle();
+                setProPanelCollapsed(deltaY < 0);
+                return true;
+            }
+        }
+
+        if (proPanelSwipeIntercepted) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                proPanelSwipeTracking = false;
+                proPanelSwipeIntercepted = false;
+            }
+            return true;
+        }
+
+        boolean handled = super.dispatchTouchEvent(event);
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            proPanelSwipeTracking = false;
+        }
+        return handled;
+    }
+
+    private boolean isPointInsideProPanel(float x, float y) {
+        int[] panelIds = {R.id.topControlBar, R.id.favDrumRow};
+        for (int panelId : panelIds) {
+            View panel = findViewById(panelId);
+            if (panel == null || panel.getVisibility() != View.VISIBLE || panel.getHeight() == 0) {
+                continue;
+            }
+            int[] location = new int[2];
+            panel.getLocationOnScreen(location);
+            if (x >= location[0] && x <= location[0] + panel.getWidth()
+                    && y >= location[1] && y <= location[1] + panel.getHeight()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String selectedPadLabel(int index) {
+        return BuildConfig.FLAVOR.equals("pro")
+                ? "PAD " + (index + 1)
+                : "Selected: PAD " + (index + 1);
+    }
+
+    private void setProPanelCollapsed(boolean collapsed) {
+        if (proPanelCollapsed == collapsed) return;
+        proPanelCollapsed = collapsed;
+        animateProPanelSection(findViewById(R.id.topPanelDetails),
+                collapsed ? 0 : dp(54));
+        animateProPanelSection(findViewById(R.id.favDrumRow),
+                collapsed ? 0 : dp(22));
+    }
+
+    private void animateProPanelSection(View section, int targetHeight) {
+        if (section == null) return;
+        int startHeight = section.getVisibility() == View.VISIBLE ? section.getHeight() : 0;
+        Object previousAnimation = section.getTag();
+        if (previousAnimation instanceof android.animation.ValueAnimator) {
+            ((android.animation.ValueAnimator) previousAnimation).cancel();
+        }
+        section.animate().cancel();
+
+        if (targetHeight > 0) {
+            section.setVisibility(View.VISIBLE);
+            android.view.ViewGroup.LayoutParams params = section.getLayoutParams();
+            params.height = startHeight;
+            section.setLayoutParams(params);
+            if (startHeight == 0) {
+                section.setAlpha(0f);
+                section.setTranslationY(-dp(8));
+            }
+        } else {
+            android.view.ViewGroup.LayoutParams params = section.getLayoutParams();
+            params.height = startHeight;
+            section.setLayoutParams(params);
+            section.setVisibility(View.VISIBLE);
+        }
+
+        android.animation.ValueAnimator heightAnimation =
+                android.animation.ValueAnimator.ofInt(startHeight, targetHeight);
+        section.setTag(heightAnimation);
+        heightAnimation.setDuration(230);
+        heightAnimation.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        heightAnimation.addUpdateListener(animation -> {
+            android.view.ViewGroup.LayoutParams params = section.getLayoutParams();
+            params.height = (Integer) animation.getAnimatedValue();
+            section.setLayoutParams(params);
+        });
+        heightAnimation.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (section.getTag() != heightAnimation) return;
+                android.view.ViewGroup.LayoutParams params = section.getLayoutParams();
+                params.height = targetHeight == 0
+                        ? (section.getId() == R.id.topPanelDetails ? dp(54) : dp(22))
+                        : targetHeight;
+                section.setLayoutParams(params);
+                section.setAlpha(targetHeight == 0 ? 0f : 1f);
+                section.setTranslationY(0f);
+                section.setVisibility(targetHeight == 0 ? View.GONE : View.VISIBLE);
+                section.setTag(null);
+            }
+        });
+        section.animate()
+                .alpha(targetHeight == 0 ? 0f : 1f)
+                .translationY(targetHeight == 0 ? -dp(8) : 0f)
+                .setDuration(230)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start();
+        heightAnimation.start();
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         MainActivity.globalInstance = this;   // cross-activity kit sync ke liye
         super.onCreate(savedInstanceState);
@@ -2354,7 +2496,8 @@ public class MainActivity extends Activity {
                 if (MainActivity.this.themeMode) {
                     v.setPressed(true);
                     MainActivity.this.selectedPad = this.index;
-                    MainActivity.this.txtSelectedPad.setText("Selected: PAD " + (this.index + 1));
+                    MainActivity.this.txtSelectedPad.setText(
+                            MainActivity.this.selectedPadLabel(this.index));
                     if (MainActivity.this.themeCustomizer != null) {
                         MainActivity.this.themeCustomizer.showDialog(this.index);
                     }
@@ -2374,7 +2517,8 @@ public class MainActivity extends Activity {
                         if (MainActivity.this.editMode) {
                             MainActivity.this.showEditPadOptions(this.index);
                         }
-                        MainActivity.this.txtSelectedPad.setText("Selected: PAD " + (this.index + 1));
+                        MainActivity.this.txtSelectedPad.setText(
+                                MainActivity.this.selectedPadLabel(this.index));
                         // ── Bank-aware seekbar refresh ──────────────────────────────
                         if (MainActivity.this.bankMode == BANK_B) {
                             MainActivity.this.seekVolume.setProgress((int) (MainActivity.this.padVolumeB[this.index] * 100.0f));

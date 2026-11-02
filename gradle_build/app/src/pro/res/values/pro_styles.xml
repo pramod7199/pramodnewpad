@@ -12,24 +12,24 @@
 
     <style name="ProPanelLabel">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">12dp</item>
+        <item name="android:layout_height">8dp</item>
         <item name="android:gravity">center</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
         <item name="android:textColor">#ffe4e5e6</item>
-        <item name="android:textSize">7sp</item>
+        <item name="android:textSize">5sp</item>
         <item name="android:textStyle">bold</item>
     </style>
 
     <style name="ProPanelButton" parent="@android:style/Widget.Button">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">27dp</item>
+        <item name="android:layout_height">17dp</item>
         <item name="android:layout_margin">1dp</item>
         <item name="android:background">@drawable/toggle_pro_off</item>
         <item name="android:paddingLeft">1dp</item>
         <item name="android:paddingRight">1dp</item>
         <item name="android:textColor">#ff18232a</item>
-        <item name="android:textSize">7sp</item>
+        <item name="android:textSize">6sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:minHeight">0dp</item>
         <item name="android:minWidth">0dp</item>
