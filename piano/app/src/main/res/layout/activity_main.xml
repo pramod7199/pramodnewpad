@@ -2,74 +2,43 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF0B1018"
+    android:background="#FF080A0D"
     android:orientation="horizontal"
-    android:padding="10dp">
+    android:padding="6dp">
+
+    <com.pramod.piano.PianoPitchBendView
+        android:id="@+id/pitchBend"
+        android:layout_width="54dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="6dp"
+        android:background="@drawable/panel_dark"
+        android:contentDescription="Vertical pitch bend control" />
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_marginEnd="10dp"
-        android:layout_weight="0.28"
+        android:layout_weight="1"
         android:background="@drawable/panel_dark"
         android:orientation="vertical"
-        android:padding="10dp">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="CHORD PLAYER"
-            android:textColor="#FFE8F0FF"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Touch and hold a chord"
-            android:textColor="#FF9BAAC0"
-            android:textSize="11sp" />
-
-        <LinearLayout
-            android:id="@+id/chordGrid"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginTop="10dp"
-            android:layout_weight="1"
-            android:orientation="vertical" />
-
-        <TextView
-            android:id="@+id/txtStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:paddingTop="8dp"
-            android:text="Load a licensed SF2 SoundFont to begin"
-            android:textColor="#FFB8C6D9"
-            android:textSize="11sp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="0.72"
-        android:background="@drawable/panel_dark"
-        android:orientation="vertical"
-        android:padding="10dp">
+        android:padding="8dp">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="46dp"
+            android:layout_height="42dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="INSTRUMENT"
-                android:textColor="#FFE8F0FF"
+                android:id="@+id/txtActiveInstrument"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="0.35"
+                android:ellipsize="end"
+                android:gravity="center_vertical"
+                android:maxLines="1"
+                android:paddingStart="6dp"
+                android:text="Loading instruments..."
+                android:textColor="#FFFFB29A"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -77,78 +46,104 @@
                 android:id="@+id/spinnerPreset"
                 android:layout_width="0dp"
                 android:layout_height="40dp"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:layout_weight="0.55"
                 android:enabled="false" />
 
             <Button
                 android:id="@+id/btnLoadSoundFont"
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
-                android:layout_marginStart="8dp"
-                android:text="LOAD SF2" />
+                android:layout_marginStart="6dp"
+                android:minWidth="64dp"
+                android:text="LOAD SF2"
+                android:textSize="10sp" />
         </LinearLayout>
 
-        <com.pramod.piano.PianoControlPanelView
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="76dp"
+            android:layout_height="38dp"
             android:layout_marginTop="4dp"
-            android:contentDescription="Stage keyboard control panel" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnOctaveDown"
+                android:layout_width="48dp"
+                android:layout_height="34dp"
+                android:text="− OCT"
+                android:textSize="9sp" />
+
+            <TextView
+                android:id="@+id/txtOctave"
+                android:layout_width="68dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="OCT 0"
+                android:textColor="#FFE8F0FF"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnOctaveUp"
+                android:layout_width="48dp"
+                android:layout_height="34dp"
+                android:text="+ OCT"
+                android:textSize="9sp" />
+
+            <Button
+                android:id="@+id/btnScrollLock"
+                android:layout_width="wrap_content"
+                android:layout_height="34dp"
+                android:layout_marginStart="10dp"
+                android:text="SCROLL UNLOCKED"
+                android:textSize="9sp" />
+
+            <TextView
+                android:id="@+id/txtStatus"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:gravity="center_vertical|end"
+                android:maxLines="1"
+                android:text="Touch a chord or piano key"
+                android:textColor="#FFB8C6D9"
+                android:textSize="10sp" />
+        </LinearLayout>
 
         <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="4dp"
+            android:fillViewport="true"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/chordRow"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <com.pramod.piano.LockableHorizontalScrollView
             android:id="@+id/keyboardScroll"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="4dp"
             android:layout_weight="1"
-            android:fillViewport="false"
             android:background="#FF080A0D"
-            android:scrollbars="horizontal"
-            android:overScrollMode="never">
+            android:fillViewport="false"
+            android:overScrollMode="never"
+            android:scrollbars="horizontal">
 
             <com.pramod.piano.PianoKeyboardView
                 android:id="@+id/pianoKeyboard"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent" />
-        </HorizontalScrollView>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_marginTop="8dp"
-            android:background="#FF111A27"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="PITCH BEND"
-                android:textColor="#FFE8F0FF"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-
-            <SeekBar
-                android:id="@+id/seekPitchBend"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:max="16383"
-                android:progress="8192"
-                android:progressBackgroundTint="#FF39485C"
-                android:progressTint="#FF78A9FF"
-                android:thumbTint="#FFE8F0FF" />
-
-            <TextView
-                android:id="@+id/txtPitchBend"
-                android:layout_width="56dp"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="CENTER"
-                android:textColor="#FF9BAAC0"
-                android:textSize="10sp" />
-        </LinearLayout>
+        </com.pramod.piano.LockableHorizontalScrollView>
     </LinearLayout>
 </LinearLayout>

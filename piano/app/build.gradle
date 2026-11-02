@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'com.google.gms.google-services'
 }
 
 android {
@@ -28,6 +29,23 @@ android {
         }
     }
 
+    signingConfigs {
+        debug {
+            // Firebase Google Sign-In is registered against this repository debug certificate.
+            storeFile rootProject.file('../spd30/app/keystore/debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeType 'PKCS12'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -40,6 +58,9 @@ android {
 }
 
 dependencies {
+    implementation 'com.google.firebase:firebase-auth:22.0.0'
+    implementation 'com.google.firebase:firebase-database:20.3.1'
+    implementation 'com.google.android.gms:play-services-auth:21.2.0'
     implementation 'com.google.oboe:oboe:1.8.1'
     implementation 'net.volcanomobile.fluidsynth-android:fluidsynth-android:2.3.3'
 }

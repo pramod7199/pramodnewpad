@@ -25,6 +25,7 @@ public final class PianoKeyboardView extends View {
     private final float blackKeyWidth;
     private final float blackKeyHeight;
     private NoteListener listener;
+    private int transposeSemitones;
 
     public PianoKeyboardView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -37,6 +38,15 @@ public final class PianoKeyboardView extends View {
 
     void setNoteListener(NoteListener listener) {
         this.listener = listener;
+    }
+
+    void setTransposeSemitones(int semitones) {
+        transposeSemitones = semitones;
+        invalidate();
+    }
+
+    boolean hasActiveTouches() {
+        return activePointers.size() > 0;
     }
 
     int getKeyboardWidth() {
@@ -132,7 +142,8 @@ public final class PianoKeyboardView extends View {
 
     private void drawLabel(Canvas canvas, int note, float centerX, float baseline,
                            int color, float sizeSp) {
-        String label = noteName(note) + octave(note);
+        int soundingNote = note + transposeSemitones;
+        String label = noteName(soundingNote) + octave(soundingNote);
         float density = getResources().getDisplayMetrics().density;
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(color);
@@ -193,8 +204,9 @@ public final class PianoKeyboardView extends View {
     }
 
     private boolean isNotePressed(int note) {
+        int soundingNote = note + transposeSemitones;
         for (int i = 0; i < activePointers.size(); i++) {
-            if (activePointers.valueAt(i) == note) return true;
+            if (activePointers.valueAt(i) == soundingNote) return true;
         }
         return false;
     }
@@ -203,7 +215,14 @@ public final class PianoKeyboardView extends View {
         int note = activePointers.get(pointerId, -1);
         if (note >= 0) {
             activePointers.delete(pointerId);
-            if (!isNotePressed(note) && listener != null) listener.onNoteOff(note);
+            boolean noteStillPressed = false;
+            for (int i = 0; i < activePointers.size(); i++) {
+                if (activePointers.valueAt(i) == note) {
+                    noteStillPressed = true;
+                    break;
+                }
+            }
+            if (!noteStillPressed && listener != null) listener.onNoteOff(note);
             invalidate();
         }
     }
@@ -221,7 +240,8 @@ public final class PianoKeyboardView extends View {
         int pointerIndex = event.getActionIndex();
         int pointerId = event.getPointerId(pointerIndex);
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-            int note = noteAt(event.getX(pointerIndex), event.getY(pointerIndex));
+            int note = noteAt(event.getX(pointerIndex), event.getY(pointerIndex))
+                    + transposeSemitones;
             activePointers.put(pointerId, note);
             if (listener != null) listener.onNoteOn(note);
             invalidate();

@@ -84,6 +84,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
     private CheckBox cbManualLoops;
     private CheckBox cbManualDrums;
     private CheckBox cbManualPro;
+    private CheckBox cbManualPiano;
 
     private enum Filter { PENDING, ACTIVE, DEACTIVATED }
     private Filter currentFilter = Filter.PENDING;
@@ -95,7 +96,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private static class UserEntry {
         String uid, email, displayName, deviceToken;
-        boolean hasFull, hasLoops, hasDrums, hasPro;
+        boolean hasFull, hasLoops, hasDrums, hasPro, hasPiano;
         boolean isDeactivated;
         boolean needsAccessSelection;
         String accessType;
@@ -103,7 +104,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         long expiresAt;
 
         boolean hasAnyAppAccess() {
-            return hasFull || hasLoops || hasDrums || hasPro;
+            return hasFull || hasLoops || hasDrums || hasPro || hasPiano;
         }
 
         boolean isTrialExpired(long now) {
@@ -329,10 +330,12 @@ public class AdminDashboardActivity extends AppCompatActivity {
         cbManualLoops = makeCheckBox("Loops", true);
         cbManualDrums = makeCheckBox("Drums", true);
         cbManualPro = makeCheckBox("Pro", false);
+        cbManualPiano = makeCheckBox("Piano", false);
         cbRow.addView(cbManualFull);
         cbRow.addView(cbManualLoops);
         cbRow.addView(cbManualDrums);
         cbRow.addView(cbManualPro);
+        cbRow.addView(cbManualPiano);
         root.addView(cbRow, matchWidth(dp(2)));
 
         Button btnManualActivate = new Button(this);
@@ -396,10 +399,12 @@ public class AdminDashboardActivity extends AppCompatActivity {
         CheckBox cbLoops = makeCheckBox("Loops", true);
         CheckBox cbDrums = makeCheckBox("Drums", true);
         CheckBox cbPro = makeCheckBox("Pro", false);
+        CheckBox cbPiano = makeCheckBox("Piano", false);
         cbRow.addView(cbFull);
         cbRow.addView(cbLoops);
         cbRow.addView(cbDrums);
         cbRow.addView(cbPro);
+        cbRow.addView(cbPiano);
         row.addView(cbRow);
 
         // Action buttons
@@ -412,7 +417,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         btnActivate.setOnClickListener(v ->
                 showActivationTypeDialog(uid, email, displayName,
                         cbFull.isChecked(), cbLoops.isChecked(), cbDrums.isChecked(),
-                        cbPro.isChecked()));
+                        cbPro.isChecked(), cbPiano.isChecked()));
         btnRow.addView(btnActivate, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -585,6 +590,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         entry.hasLoops = readAppAccess(appsSnap, "loops");
         entry.hasDrums = readAppAccess(appsSnap, "drums");
         entry.hasPro = appsSnap.exists() && readAppAccess(appsSnap, "pro");
+        entry.hasPiano = appsSnap.exists() && readAppAccess(appsSnap, "piano");
 
         entry.activatedAt = readTimestamp(child.child("activatedAt"));
         entry.expiresAt = readTimestamp(child.child("expiresAt"));
@@ -813,7 +819,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 "APK: " + (entry.hasFull ? "✅Full " : "❌Full ")
                         + (entry.hasLoops ? "✅Loops " : "❌Loops ")
                         + (entry.hasDrums ? "✅Drums " : "❌Drums ")
-                        + (entry.hasPro ? "✅Pro" : "❌Pro")
+                        + (entry.hasPro ? "✅Pro " : "❌Pro ")
+                        + (entry.hasPiano ? "✅Piano" : "❌Piano")
                         + (entry.deviceToken != null ? "  |  🔒 Device locked" : "  |  🔓 Unlocked"));
 
         // Action buttons
@@ -838,7 +845,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
             btnGrantAccess.setText("Grant Access");
             btnGrantAccess.setOnClickListener(v ->
                     showEditAppsDialog(entry.uid, entry.email, entry.displayName,
-                            entry.hasFull, entry.hasLoops, entry.hasDrums, entry.hasPro));
+                            entry.hasFull, entry.hasLoops, entry.hasDrums, entry.hasPro,
+                            entry.hasPiano));
             btnRow.addView(btnGrantAccess, new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         } else {
@@ -856,7 +864,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
             ep.leftMargin = dp(6);
             btnEdit.setOnClickListener(v ->
                     showEditAppsDialog(entry.uid, entry.email, entry.displayName,
-                            entry.hasFull, entry.hasLoops, entry.hasDrums, entry.hasPro));
+                            entry.hasFull, entry.hasLoops, entry.hasDrums, entry.hasPro,
+                            entry.hasPiano));
             btnRow.addView(btnEdit, ep);
 
             if (!TextUtils.isEmpty(entry.deviceToken)) {
@@ -885,10 +894,12 @@ public class AdminDashboardActivity extends AppCompatActivity {
         CheckBox cbLoops = makeCheckBox("Loops", true);
         CheckBox cbDrums = makeCheckBox("Drums", true);
         CheckBox cbPro = makeCheckBox("Pro", false);
+        CheckBox cbPiano = makeCheckBox("Piano", false);
         layout.addView(cbFull);
         layout.addView(cbLoops);
         layout.addView(cbDrums);
         layout.addView(cbPro);
+        layout.addView(cbPiano);
 
         new AlertDialog.Builder(this)
                 .setTitle("Grant app access")
@@ -897,7 +908,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 .setPositiveButton("Activate", (dialog, which) ->
                         activateUser(entry.uid, entry.email, entry.displayName,
                                 cbFull.isChecked(), cbLoops.isChecked(), cbDrums.isChecked(),
-                                cbPro.isChecked(), false, 0))
+                                cbPro.isChecked(), cbPiano.isChecked(), false, 0))
                 .setNegativeButton("Cancel", null)
                 .show();
     }
@@ -906,17 +917,17 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void showActivationTypeDialog(String uid, String email, String displayName,
                                           boolean full, boolean loops, boolean drums,
-                                          boolean pro) {
+                                          boolean pro, boolean piano) {
         String[] choices = {"Permanent", "Trial"};
         new AlertDialog.Builder(this)
                 .setTitle("Access duration")
                 .setItems(choices, (dialog, index) -> {
                     if (index == 0) {
                         activateUser(uid, email, displayName,
-                                full, loops, drums, pro, false, 0);
+                                full, loops, drums, pro, piano, false, 0);
                     } else {
                         showTrialExpiryPicker(uid, email, displayName,
-                                full, loops, drums, pro);
+                                full, loops, drums, pro, piano);
                     }
                 })
                 .setNegativeButton("Cancel", null)
@@ -925,7 +936,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void showTrialExpiryPicker(String uid, String email, String displayName,
                                        boolean full, boolean loops, boolean drums,
-                                       boolean pro) {
+                                       boolean pro, boolean piano) {
         Calendar initial = Calendar.getInstance();
         initial.add(Calendar.DAY_OF_YEAR, 1);
         DatePickerDialog datePicker = new DatePickerDialog(
@@ -948,7 +959,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
                                     return;
                                 }
                                 activateUser(uid, email, displayName,
-                                        full, loops, drums, pro, true, expiresAt);
+                                        full, loops, drums, pro, piano, true, expiresAt);
                             },
                             initial.get(Calendar.HOUR_OF_DAY),
                             initial.get(Calendar.MINUTE),
@@ -964,6 +975,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void activateUser(String uid, String email, String displayName,
                               boolean full, boolean loops, boolean drums, boolean pro,
+                              boolean piano,
                               boolean trial, long expiresAt) {
         Map<String, Object> data = new HashMap<>();
         data.put("email",       email != null ? email : "");
@@ -977,6 +989,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         appsMap.put("loops", loops);
         appsMap.put("drums", drums);
         appsMap.put("pro", pro);
+        appsMap.put("piano", piano);
         data.put("allowedApps", appsMap);
 
         usersRef.child(uid).setValue(data).addOnCompleteListener(this, saveTask -> {
@@ -1011,12 +1024,14 @@ public class AdminDashboardActivity extends AppCompatActivity {
     }
 
     private void saveAllowedApps(String uid, String email,
-                                 boolean full, boolean loops, boolean drums, boolean pro) {
+                                 boolean full, boolean loops, boolean drums, boolean pro,
+                                 boolean piano) {
         Map<String, Object> appsMap = new HashMap<>();
         appsMap.put("full",  full);
         appsMap.put("loops", loops);
         appsMap.put("drums", drums);
         appsMap.put("pro", pro);
+        appsMap.put("piano", piano);
         usersRef.child(uid).child("allowedApps").setValue(appsMap);
         Toast.makeText(this, "Access updated: " + (email != null ? email : uid), Toast.LENGTH_SHORT).show();
     }
@@ -1129,6 +1144,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         appsMap.put("loops", cbManualLoops.isChecked());
         appsMap.put("drums", cbManualDrums.isChecked());
         appsMap.put("pro", cbManualPro.isChecked());
+        appsMap.put("piano", cbManualPiano.isChecked());
         data.put("allowedApps", appsMap);
 
         usersRef.child(uid).setValue(data);
@@ -1138,7 +1154,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void showEditAppsDialog(String uid, String email, String displayName,
                                     boolean curFull, boolean curLoops, boolean curDrums,
-                                    boolean curPro) {
+                                    boolean curPro, boolean curPiano) {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(20);
@@ -1148,10 +1164,12 @@ public class AdminDashboardActivity extends AppCompatActivity {
         CheckBox cbLoops = makeCheckBox("Loops (com.pramod.loopmidi.loops)",  curLoops);
         CheckBox cbDrums = makeCheckBox("Drums (com.pramod.loopmidi.drums)",  curDrums);
         CheckBox cbPro = makeCheckBox("Pro (com.pramod.loopmidi.pro)", curPro);
+        CheckBox cbPiano = makeCheckBox("Piano (com.pramod.piano)", curPiano);
         layout.addView(cbFull);
         layout.addView(cbLoops);
         layout.addView(cbDrums);
         layout.addView(cbPro);
+        layout.addView(cbPiano);
 
         new AlertDialog.Builder(this)
                 .setTitle("APK Access — " + (!TextUtils.isEmpty(email) ? email : uid))
@@ -1159,7 +1177,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 .setPositiveButton("Save", (d, w) ->
                         saveAllowedApps(uid, email,
                                 cbFull.isChecked(), cbLoops.isChecked(), cbDrums.isChecked(),
-                                cbPro.isChecked()))
+                                cbPro.isChecked(), cbPiano.isChecked()))
                 .setNegativeButton("Cancel", null)
                 .show();
     }

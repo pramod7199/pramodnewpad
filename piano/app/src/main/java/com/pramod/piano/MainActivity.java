@@ -14,7 +14,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -34,7 +33,6 @@ import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity implements PianoKeyboardView.NoteListener {
     private static final int REQUEST_SOUNDFONT = 4101;
-    private static final int CENTER_BEND = 8192;
     private static final int[] CHORD_ROOTS = {60, 67, 57, 65, 62, 64, 59, 60};
     private static final String[] CHORD_NAMES = {
             "C MAJOR", "G MAJOR", "A MINOR", "F MAJOR",
@@ -51,12 +49,16 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
     }
 
     private PianoKeyboardView keyboard;
+    private PianoPitchBendView pitchBendView;
+    private LockableHorizontalScrollView keyboardScroll;
     private Spinner presetSpinner;
     private TextView status;
-    private TextView pitchLabel;
+    private TextView activeInstrument;
+    private TextView octaveLabel;
     private boolean engineReady;
     private boolean soundFontLoaded;
     private boolean presetReady;
+    private int octaveShift;
     private int samplePresetCount;
     private int presetLoadGeneration;
     private String selectedSoundFont;
@@ -83,10 +85,17 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
         keyboard = findViewById(R.id.pianoKeyboard);
         keyboard.setNoteListener(this);
         status = findViewById(R.id.txtStatus);
+        activeInstrument = findViewById(R.id.txtActiveInstrument);
+        octaveLabel = findViewById(R.id.txtOctave);
+        pitchBendView = findViewById(R.id.pitchBend);
+        keyboardScroll = findViewById(R.id.keyboardScroll);
         presetSpinner = findViewById(R.id.spinnerPreset);
+        pitchBendView.setBendListener(value -> {
+            if (engineReady) nativePitchBend(0, value);
+        });
         setupChordButtons();
         setupSoundFontPicker();
-        setupPitchBend();
+        setupOctaveAndScrollLock();
 
         engineReady = nativeCreate();
         if (!engineReady) {
@@ -98,41 +107,59 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
     }
 
     private void setupChordButtons() {
-        LinearLayout grid = findViewById(R.id.chordGrid);
-        for (int row = 0; row < 4; row++) {
-            LinearLayout buttonRow = new LinearLayout(this);
-            buttonRow.setOrientation(LinearLayout.HORIZONTAL);
-            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-            rowParams.bottomMargin = dp(6);
-            grid.addView(buttonRow, rowParams);
-            for (int column = 0; column < 2; column++) {
-                int chordIndex = row * 2 + column;
-                Button chord = new Button(this);
-                chord.setText(CHORD_NAMES[chordIndex]);
-                chord.setTextColor(0xFFEAF1FF);
-                chord.setTextSize(12f);
-                chord.setAllCaps(false);
-                chord.setBackgroundResource(R.drawable.chord_button);
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
-                        ViewGroup.LayoutParams.MATCH_PARENT, 1f);
-                params.setMargins(dp(3), dp(3), dp(3), dp(3));
-                buttonRow.addView(chord, params);
-                chord.setOnTouchListener((view, event) -> {
-                    int action = event.getActionMasked();
-                    if (action == android.view.MotionEvent.ACTION_DOWN) {
-                        playChord(chordIndex, true);
-                        return true;
-                    }
-                    if (action == android.view.MotionEvent.ACTION_UP
-                            || action == android.view.MotionEvent.ACTION_CANCEL) {
-                        playChord(chordIndex, false);
-                        return true;
-                    }
+        LinearLayout chordRow = findViewById(R.id.chordRow);
+        for (int chordIndex = 0; chordIndex < CHORD_NAMES.length; chordIndex++) {
+            final int index = chordIndex;
+            Button chord = new Button(this);
+            chord.setText(CHORD_NAMES[chordIndex]);
+            chord.setTextColor(0xFFEAF1FF);
+            chord.setTextSize(10f);
+            chord.setAllCaps(false);
+            chord.setMinWidth(dp(60));
+            chord.setPadding(dp(4), 0, dp(4), 0);
+            chord.setBackgroundResource(R.drawable.chord_button);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+            params.setMargins(dp(3), dp(2), dp(3), dp(2));
+            chordRow.addView(chord, params);
+            chord.setOnTouchListener((view, event) -> {
+                int action = event.getActionMasked();
+                if (action == android.view.MotionEvent.ACTION_DOWN) {
+                    playChord(index, true);
                     return true;
-                });
-            }
+                }
+                if (action == android.view.MotionEvent.ACTION_UP
+                        || action == android.view.MotionEvent.ACTION_CANCEL) {
+                    playChord(index, false);
+                    return true;
+                }
+                return true;
+            });
         }
+    }
+
+    private void setupOctaveAndScrollLock() {
+        findViewById(R.id.btnOctaveDown).setOnClickListener(v -> changeOctave(-1));
+        findViewById(R.id.btnOctaveUp).setOnClickListener(v -> changeOctave(1));
+        Button lockButton = findViewById(R.id.btnScrollLock);
+        lockButton.setOnClickListener(v -> {
+            boolean locked = !keyboardScroll.isScrollLocked();
+            keyboardScroll.setScrollLocked(locked);
+            lockButton.setText(locked ? "SCROLL LOCKED" : "SCROLL UNLOCKED");
+            status.setText(locked ? "Keyboard scroll locked" : "Keyboard scroll unlocked");
+        });
+    }
+
+    private void changeOctave(int direction) {
+        if (keyboard.hasActiveTouches()) {
+            status.setText("Release the keys before changing octave");
+            return;
+        }
+        int next = Math.max(-1, Math.min(1, octaveShift + direction));
+        if (next == octaveShift) return;
+        octaveShift = next;
+        keyboard.setTransposeSemitones(octaveShift * 12);
+        octaveLabel.setText("OCT " + (octaveShift > 0 ? "+" : "") + octaveShift);
     }
 
     private void playChord(int chordIndex, boolean on) {
@@ -162,6 +189,7 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
                 if (option.soundFont) {
                     if (soundFontLoaded && nativeSelectPreset(0, option.program)) {
                         presetReady = true;
+                        activeInstrument.setText(option.label);
                         status.setText(selectedSoundFont + " • " + option.label);
                     } else {
                         status.setText("Could not select that SoundFont preset");
@@ -228,6 +256,7 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
         presetSpinner.setAdapter(adapter);
         presetSpinner.setEnabled(true);
         presetSpinner.setSelection(samplePresetCount);
+        activeInstrument.setText(presetOptions.get(samplePresetCount).label);
     }
 
     private void loadBundledInstrumentPresets() {
@@ -254,6 +283,7 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
             presetSpinner.setAdapter(adapter);
             presetSpinner.setEnabled(true);
             presetSpinner.setSelection(0);
+            activeInstrument.setText(presetOptions.get(0).label);
         } catch (IOException error) {
             status.setText("Could not read the bundled instrument list");
             Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
@@ -268,6 +298,7 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
                 if (isFinishing() || generation != presetLoadGeneration) return;
                 if (nativeSetSample(audio.pcm, audio.sampleRate, audio.channels)) {
                     presetReady = true;
+                    activeInstrument.setText(option.label);
                     status.setText(option.label + " • ready");
                 } else {
                     status.setText("Could not load " + option.label);
@@ -418,28 +449,6 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
     private String displayName(String fileName) {
         int extension = fileName.lastIndexOf('.');
         return (extension > 0 ? fileName.substring(0, extension) : fileName).trim();
-    }
-
-    private void setupPitchBend() {
-        SeekBar bend = findViewById(R.id.seekPitchBend);
-        pitchLabel = findViewById(R.id.txtPitchBend);
-        bend.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
-                if (engineReady) nativePitchBend(0, value);
-                pitchLabel.setText(value == CENTER_BEND ? "CENTER"
-                        : value < CENTER_BEND ? "DOWN" : "UP");
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar bar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar bar) {
-                bar.setProgress(CENTER_BEND);
-            }
-        });
     }
 
     @Override
