@@ -5,7 +5,9 @@ Standalone landscape Android piano/keyboard starter project.
 ## Features in this starter
 
 - Oboe low-latency stereo output with FluidSynth 2.3.3 rendering through JNI.
-- 88-key horizontally scrollable keyboard with multi-touch note on/off.
+- Classic black-and-white, 88-key horizontally scrollable keyboard. Every key
+  is labeled with its note and octave (such as A0, C#4, or C8), and held
+  multi-touch keys highlight independently.
 - Touch-and-hold chord pads on the left.
 - Instrument program selector (General MIDI labels).
 - 33 bundled WAV/MP3 sample presets, named from the uploaded instrument files.

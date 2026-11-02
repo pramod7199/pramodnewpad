@@ -22,7 +22,6 @@ public final class PianoKeyboardView extends View {
     private final float blackKeyWidth;
     private final float blackKeyHeight;
     private NoteListener listener;
-    private int pressedNote = -1;
 
     public PianoKeyboardView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -60,15 +59,16 @@ public final class PianoKeyboardView extends View {
             if (isBlack(note)) continue;
             float left = whiteIndex * whiteKeyWidth;
             float right = left + whiteKeyWidth;
-            paint.setColor(note == pressedNote ? 0xFFDCE8F7 : 0xFFFFFEFA);
+            paint.setColor(isNotePressed(note) ? 0xFFBBD7FF : 0xFFFFFFFF);
             paint.setStyle(Paint.Style.FILL);
             canvas.drawRect(left, 0, right, height, paint);
-            paint.setColor(0xFF202833);
+            paint.setColor(0xFF111827);
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(1f);
+            paint.setStrokeWidth(Math.max(1f, getResources().getDisplayMetrics().density));
             canvas.drawRect(left, 0, right, height, paint);
-            drawLabel(canvas, note, (left + right) * 0.5f, height - 8f * getResources()
-                    .getDisplayMetrics().density, 0xFF283344, 10f);
+            drawLabel(canvas, note, (left + right) * 0.5f,
+                    height - 10f * getResources().getDisplayMetrics().density,
+                    0xFF111827, 9f);
             whiteIndex++;
         }
 
@@ -80,14 +80,16 @@ public final class PianoKeyboardView extends View {
                 float right = centerX + blackKeyWidth * 0.5f;
                 float bottom = height * blackKeyHeight;
                 paint.setStyle(Paint.Style.FILL);
-                paint.setColor(note == pressedNote ? 0xFF5579B8 : 0xFF101722);
-                canvas.drawRoundRect(left, 0, right, bottom, 0, 0, paint);
+                paint.setColor(isNotePressed(note) ? 0xFF3977C5 : 0xFF080B10);
+                float radius = 3f * getResources().getDisplayMetrics().density;
+                canvas.drawRoundRect(left, 0, right, bottom, radius, radius, paint);
                 paint.setColor(0xFF05080D);
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(1f);
-                canvas.drawRoundRect(left, 0, right, bottom, 0, 0, paint);
-                drawLabel(canvas, note, centerX, bottom - 7f * getResources()
-                        .getDisplayMetrics().density, 0xFFE9F0FA, 8f);
+                canvas.drawRoundRect(left, 0, right, bottom, radius, radius, paint);
+                drawLabel(canvas, note, centerX,
+                        bottom - 8f * getResources().getDisplayMetrics().density,
+                        0xFFFFFFFF, 7f);
             } else {
                 whiteIndex++;
             }
@@ -96,13 +98,15 @@ public final class PianoKeyboardView extends View {
 
     private void drawLabel(Canvas canvas, int note, float centerX, float baseline,
                            int color, float sizeSp) {
-        String label = noteName(note);
+        String label = noteName(note) + octave(note);
         float density = getResources().getDisplayMetrics().density;
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(color);
         paint.setTextSize(sizeSp * density);
         paint.setTextAlign(Paint.Align.CENTER);
+        paint.setFakeBoldText(true);
         canvas.drawText(label, centerX, baseline, paint);
+        paint.setFakeBoldText(false);
     }
 
     private int noteAt(float x, float y) {
@@ -147,12 +151,22 @@ public final class PianoKeyboardView extends View {
         return names[note % 12];
     }
 
+    private static int octave(int note) {
+        return note / 12 - 1;
+    }
+
+    private boolean isNotePressed(int note) {
+        for (int i = 0; i < activePointers.size(); i++) {
+            if (activePointers.valueAt(i) == note) return true;
+        }
+        return false;
+    }
+
     private void releasePointer(int pointerId) {
         int note = activePointers.get(pointerId, -1);
         if (note >= 0) {
             activePointers.delete(pointerId);
-            if (listener != null) listener.onNoteOff(note);
-            if (note == pressedNote) pressedNote = -1;
+            if (!isNotePressed(note) && listener != null) listener.onNoteOff(note);
             invalidate();
         }
     }
@@ -160,25 +174,24 @@ public final class PianoKeyboardView extends View {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_CANCEL) {
+            for (int i = activePointers.size() - 1; i >= 0; i--) {
+                releasePointer(activePointers.keyAt(i));
+            }
+            return true;
+        }
+
         int pointerIndex = event.getActionIndex();
         int pointerId = event.getPointerId(pointerIndex);
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
             int note = noteAt(event.getX(pointerIndex), event.getY(pointerIndex));
             activePointers.put(pointerId, note);
-            pressedNote = note;
             if (listener != null) listener.onNoteOn(note);
             invalidate();
             return true;
         }
-        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP
-                || action == MotionEvent.ACTION_CANCEL) {
-            if (action == MotionEvent.ACTION_CANCEL) {
-                for (int i = activePointers.size() - 1; i >= 0; i--) {
-                    releasePointer(activePointers.keyAt(i));
-                }
-            } else {
-                releasePointer(pointerId);
-            }
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
+            releasePointer(pointerId);
             return true;
         }
         return true;
