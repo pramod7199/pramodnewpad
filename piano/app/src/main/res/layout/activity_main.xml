@@ -90,6 +90,71 @@
 
         <LinearLayout
             android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:layout_marginTop="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnPresetPrevious"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
+                android:text="−"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnPresetNext"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
+                android:text="+"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnImportAudio"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_marginStart="4dp"
+                android:text="ADD WAV/MP3"
+                android:textSize="8sp" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/btnMidiIn"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:text="USB MIDI IN"
+                android:textSize="8sp" />
+
+            <Button
+                android:id="@+id/btnMidiOut"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_marginStart="4dp"
+                android:text="USB MIDI OUT"
+                android:textSize="8sp" />
+
+            <Button
+                android:id="@+id/btnZoomOut"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="4dp"
+                android:text="− ZOOM"
+                android:textSize="7sp" />
+
+            <Button
+                android:id="@+id/btnZoomIn"
+                android:layout_width="42dp"
+                android:layout_height="30dp"
+                android:text="+ ZOOM"
+                android:textSize="7sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="34dp"
             android:layout_marginTop="3dp"
             android:gravity="center_vertical"
@@ -250,6 +315,22 @@
                 android:textColor="#FFE8F0FF"
                 android:textSize="7sp" />
         </LinearLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:layout_marginTop="2dp"
+            android:fillViewport="true"
+            android:overScrollMode="never"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/favoriteBanksRow"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
 
         <HorizontalScrollView
             android:layout_width="match_parent"

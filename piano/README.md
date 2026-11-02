@@ -14,6 +14,9 @@ Standalone landscape Android piano/keyboard starter project.
 - SF2 file picker using Android's Storage Access Framework, with GM programs.
 - Vertical pitch bender on the left that returns to center when released.
 - Octave transpose and keyboard scroll lock controls.
+- Adjustable keyboard zoom and ten long-press programmable favorite banks.
+- Up to 100 locally imported WAV/MP3 instruments, retained in app storage.
+- USB MIDI device support for incoming keyboard notes and outgoing note events.
 - Black instrument fascia with an LCD-style active-instrument display.
 - Master output volume and a three-band low/mid/high equalizer applied to both
   SoundFont and bundled-sample audio.

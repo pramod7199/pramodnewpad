@@ -26,8 +26,9 @@ public final class PianoKeyboardView extends View {
     private final Paint blackEdgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final SparseIntArray activePointers = new SparseIntArray();
-    private final float whiteKeyWidth;
-    private final float blackKeyWidth;
+    private final SparseIntArray externalNotes = new SparseIntArray();
+    private float whiteKeyWidth;
+    private float blackKeyWidth;
     private final float blackKeyHeight;
     private NoteListener listener;
     private int transposeSemitones;
@@ -64,6 +65,24 @@ public final class PianoKeyboardView extends View {
 
     void setTransposeSemitones(int semitones) {
         transposeSemitones = semitones;
+        invalidate();
+    }
+
+    void changeZoom(float factor) {
+        float baseWidth = 42f * getResources().getDisplayMetrics().density;
+        whiteKeyWidth = Math.max(baseWidth * 0.65f,
+                Math.min(baseWidth * 1.65f, whiteKeyWidth * factor));
+        blackKeyWidth = whiteKeyWidth * 0.62f;
+        requestLayout();
+        invalidate();
+    }
+
+    void setExternalNote(int note, boolean pressed) {
+        if (pressed) {
+            externalNotes.put(note, 1);
+        } else {
+            externalNotes.delete(note);
+        }
         invalidate();
     }
 
@@ -207,6 +226,7 @@ public final class PianoKeyboardView extends View {
 
     private boolean isNotePressed(int note) {
         int soundingNote = note + transposeSemitones;
+        if (externalNotes.get(soundingNote, 0) > 0) return true;
         for (int i = 0; i < activePointers.size(); i++) {
             if (activePointers.valueAt(i) == soundingNote) return true;
         }
