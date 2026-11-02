@@ -448,9 +448,7 @@ final class PadThemeCustomizer {
 
     private void applyPadImage(int padIndex) {
         int preset = preferences.getInt(KEY_PRESET, 0);
-        pads[padIndex].setTextColor(preset == 3
-                || (BuildConfig.FLAVOR.equals("pro") && preset == 0)
-                ? 0xFF172033 : Color.WHITE);
+        pads[padIndex].setTextColor(preset == 3 ? 0xFF172033 : Color.WHITE);
         Drawable base = createPadBase();
         String uriText = preferences.getString(KEY_PAD_IMAGE + padIndex, null);
         if (uriText == null) {
@@ -729,8 +727,8 @@ final class PadThemeCustomizer {
 
     private int[] padSelectorColors(int preset) {
         if (preset == 0 && BuildConfig.FLAVOR.equals("pro")) {
-            return new int[]{0xFFEAF3FA, 0xFFDCE8F0, 0xFFC9D8E2, 0xFF168BFF,
-                    0xFFFFFFFF, 0xFFF4F7F9, 0xFFE0E5E8, 0xFF9AA8AF};
+            return new int[]{0xFF454B51, 0xFF272C31, 0xFF15191D, 0xFF8FD8F5,
+                    0xFF292D32, 0xFF171A1E, 0xFF0B0D10, 0xFF555D65};
         }
         switch (preset) {
             case 1:

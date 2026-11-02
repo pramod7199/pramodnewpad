@@ -164,6 +164,7 @@ public class MainActivity extends Activity {
     private SeekBar seekMasterVolume;
     private SeekBar seekMasterPitch;
     private TextView txtKitName;
+    private TextView txtKitNumber;
     private TextView txtMidiStatus;
     private TextView txtSelectedPad;
     private ArrayList<MidiOutputPort> midiOutputPorts = new ArrayList<>();
@@ -1740,6 +1741,10 @@ public class MainActivity extends Activity {
         this.prefs = getSharedPreferences(PREF_NAME, 0);
         // txtBrand auto-size to fit screen — no marquee scroll needed
         this.txtKitName = (TextView) findViewById(R.id.txtKitName);
+        int kitNumberViewId = getResources().getIdentifier(
+                "txtKitNumber", "id", getPackageName());
+        this.txtKitNumber = kitNumberViewId == 0
+                ? null : (TextView) findViewById(kitNumberViewId);
         this.txtSelectedPad = (TextView) findViewById(R.id.txtSelectedPad);
         this.txtMidiStatus = (TextView) findViewById(R.id.txtMidiStatus);
         this.txtMidiStatus.setText("MIDI status: disconnected");
@@ -2422,11 +2427,20 @@ public class MainActivity extends Activity {
         updateBankToggleButton();
         // Show/load the active bank's kit name (both banks' samples stay loaded).
         if (bankMode == BANK_B) {
-            txtKitName.setText(currentKitNameB);
+            setKitNameDisplay(currentKitNameB);
         } else {
-            txtKitName.setText(currentKitName);
+            setKitNameDisplay(currentKitName);
         }
         if (toastMsg != null) Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show();
+    }
+
+    private void setKitNameDisplay(String name) {
+        txtKitName.setText(name);
+        if (txtKitNumber == null) return;
+        int activeKitIndex = bankMode == BANK_B ? kitIndexB : kitIndex;
+        String number = String.valueOf(activeKitIndex);
+        while (number.length() < 3) number = "0" + number;
+        txtKitNumber.setText(number);
     }
 
     /** Refresh all FX seekbars to reflect the currently selected bank + pad. */
@@ -3694,7 +3708,7 @@ public class MainActivity extends Activity {
                 if (str != null && str.length() > 0) {
                     String str2 = this.pendingSaveKitName;
                     this.currentKitName = str2;
-                    this.txtKitName.setText(str2);
+                    setKitNameDisplay(str2);
                 }
                 saveKitToFolder(uri);
                 this.pendingSaveKitName = null;
@@ -3741,7 +3755,7 @@ public class MainActivity extends Activity {
                 if (MainActivity.this.currentKitName.length() == 0) {
                     MainActivity.this.currentKitName = "KIT " + MainActivity.this.kitIndex;
                 }
-                MainActivity.this.txtKitName.setText(MainActivity.this.currentKitName);
+                MainActivity.this.setKitNameDisplay(MainActivity.this.currentKitName);
                 MainActivity mainActivity = MainActivity.this;
                 Log.i(MainActivity.TAG, "renameKitDialog: saving kit name='" + MainActivity.this.currentKitName + "' for kitNo=" + mainActivity.kitIndex);
                 mainActivity.saveKitToMemory(mainActivity.kitIndex);
@@ -3846,8 +3860,8 @@ public class MainActivity extends Activity {
             this.currentKitName = this.prefs.getString("kit_name_" + kitNo, "KIT " + kitNo);
         }
         this.currentKitNameB = this.prefs.getString("kit_name_B_" + this.kitIndexB, "KIT B:" + this.kitIndexB);
-        if (this.bankMode == BANK_B) this.txtKitName.setText(this.currentKitNameB);
-        else this.txtKitName.setText(this.currentKitName);
+        if (this.bankMode == BANK_B) this.setKitNameDisplay(this.currentKitNameB);
+        else this.setKitNameDisplay(this.currentKitName);
         Log.i(TAG, "loadKitFromMemory: kitA=" + kitNo + " '" + this.currentKitName + "' kitB=" + this.kitIndexB + " '" + this.currentKitNameB + "'");
 
         for (int i = 0; i < 8; i++) {
@@ -4109,18 +4123,18 @@ public class MainActivity extends Activity {
                 if (bankMode == BANK_B) {
                     // Bank B mode: update Bank B's kit name and display
                     this.currentKitNameB = "B:" + stripped;
-                    this.txtKitName.setText(this.currentKitNameB);
+                    this.setKitNameDisplay(this.currentKitNameB);
                     prefs.edit().putString("kit_name_B_" + this.kitIndexB, this.currentKitNameB).commit();
                 } else if (bankMode == LAYER_AB) {
                     // A+B Layer mode: update both bank names from the same folder
                     this.currentKitName  = stripped;
                     this.currentKitNameB = "B:" + stripped;
-                    this.txtKitName.setText(stripped + " [A+B]");
+                    this.setKitNameDisplay(stripped + " [A+B]");
                     prefs.edit().putString("kit_name_B_" + this.kitIndexB, this.currentKitNameB).commit();
                 } else {
                     // Bank A mode
                     this.currentKitName = stripped;
-                    this.txtKitName.setText(stripped);
+                    this.setKitNameDisplay(stripped);
                 }
             }
             DocumentFile dataFile2 = kitFolder3.findFile("kit_data.json");

@@ -5,8 +5,8 @@
             <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
                 <shape android:shape="rectangle">
                     <corners android:radius="10dp" />
-                    <gradient android:angle="270" android:startColor="#ffdfedfa" android:centerColor="#ffc2d4e4" android:endColor="#ff9fb5c5" />
-                    <stroke android:width="3dp" android:color="#ff168bff" />
+                    <gradient android:angle="270" android:startColor="#ff454b51" android:centerColor="#ff272c31" android:endColor="#ff15191d" />
+                    <stroke android:width="3dp" android:color="#ff8fd8f5" />
                 </shape>
             </item>
         </layer-list>
@@ -16,14 +16,14 @@
             <item android:left="3dp" android:top="4dp" android:right="1dp" android:bottom="1dp">
                 <shape android:shape="rectangle">
                     <corners android:radius="11dp" />
-                    <solid android:color="#ff92999d" />
+                    <solid android:color="#ff050607" />
                 </shape>
             </item>
             <item android:left="1dp" android:top="1dp" android:right="3dp" android:bottom="3dp">
                 <shape android:shape="rectangle">
                     <corners android:radius="10dp" />
-                    <gradient android:angle="270" android:startColor="#ffffffff" android:centerColor="#fff4f5f5" android:endColor="#ffdce0e2" />
-                    <stroke android:width="2dp" android:color="#ff9fa7ab" />
+                    <gradient android:angle="270" android:startColor="#ff292d32" android:centerColor="#ff171a1e" android:endColor="#ff0b0d10" />
+                    <stroke android:width="2dp" android:color="#ff555d65" />
                     <padding android:left="5dp" android:top="5dp" android:right="5dp" android:bottom="5dp" />
                 </shape>
             </item>
