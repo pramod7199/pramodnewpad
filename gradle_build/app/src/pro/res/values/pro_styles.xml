@@ -1,19 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="ProTopButton" parent="@android:style/Widget.Button">
+    <style name="ProPanelCell">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingLeft">1dp</item>
+        <item name="android:paddingRight">1dp</item>
+    </style>
+
+    <style name="ProPanelLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">12dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">#ffe4e5e6</item>
+        <item name="android:textSize">7sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="ProPanelButton" parent="@android:style/Widget.Button">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">27dp</item>
         <item name="android:layout_margin">1dp</item>
         <item name="android:background">@drawable/toggle_pro_off</item>
-        <item name="android:paddingLeft">2dp</item>
-        <item name="android:paddingRight">2dp</item>
-        <item name="android:textColor">#ffffffff</item>
-        <item name="android:textSize">8sp</item>
+        <item name="android:paddingLeft">1dp</item>
+        <item name="android:paddingRight">1dp</item>
+        <item name="android:textColor">#ff18232a</item>
+        <item name="android:textSize">7sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:minHeight">0dp</item>
         <item name="android:minWidth">0dp</item>
-        <item name="android:singleLine">true</item>
+        <item name="android:maxLines">2</item>
         <item name="android:ellipsize">end</item>
     </style>
 </resources>
