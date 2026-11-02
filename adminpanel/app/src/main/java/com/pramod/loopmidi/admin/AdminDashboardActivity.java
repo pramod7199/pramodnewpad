@@ -1,8 +1,12 @@
 package com.pramod.loopmidi.admin;
 
+import android.animation.ValueAnimator;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,6 +27,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
@@ -36,11 +41,20 @@ import java.util.Calendar;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class AdminDashboardActivity extends AppCompatActivity {
+
+    public static final String ACTION_NEW_ACCESS_REQUEST =
+            "com.pramod.loopmidi.admin.NEW_ACCESS_REQUEST";
+    static final String NOTIFICATION_PREFS = "admin_notifications";
+    static final String KEY_NEW_REQUEST_PENDING = "new_request_pending";
+    private static final String KEY_KNOWN_PENDING_UIDS = "known_pending_uids";
+    private static final int BELL_IDLE_COLOR = 0xffeeeeee;
 
     private FirebaseAuth auth;
     private DatabaseReference pendingRef;
@@ -63,6 +77,14 @@ public class AdminDashboardActivity extends AppCompatActivity {
     private Button btnFilterDeactivated;
     private Button btnExpiredBell;
     private TextView txtExpiredBellDot;
+    private ValueAnimator bellBlinkAnimator;
+    private boolean notificationReceiverRegistered;
+    private final BroadcastReceiver notificationReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            startBellBlink();
+        }
+    };
     private ValueEventListener pendingListener;
     private ValueEventListener activeListener;
     private ValueEventListener deactivatedListener;
@@ -85,6 +107,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
     private CheckBox cbManualDrums;
     private CheckBox cbManualPro;
     private CheckBox cbManualPiano;
+    private CheckBox cbManualSpd30;
 
     private enum Filter { PENDING, ACTIVE, DEACTIVATED }
     private Filter currentFilter = Filter.PENDING;
@@ -96,7 +119,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private static class UserEntry {
         String uid, email, displayName, deviceToken;
-        boolean hasFull, hasLoops, hasDrums, hasPro, hasPiano;
+        boolean hasFull, hasLoops, hasDrums, hasPro, hasPiano, hasSpd30;
         boolean isDeactivated;
         boolean needsAccessSelection;
         String accessType;
@@ -104,7 +127,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         long expiresAt;
 
         boolean hasAnyAppAccess() {
-            return hasFull || hasLoops || hasDrums || hasPro || hasPiano;
+            return hasFull || hasLoops || hasDrums || hasPro || hasPiano || hasSpd30;
         }
 
         boolean isTrialExpired(long now) {
@@ -137,6 +160,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        stopBellBlink();
         if (pendingListener != null) pendingRef.removeEventListener(pendingListener);
         if (activeListener != null) usersRef.removeEventListener(activeListener);
         if (deactivatedListener != null) deactivatedRef.removeEventListener(deactivatedListener);
@@ -148,8 +172,30 @@ public class AdminDashboardActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_NEW_REQUEST_PENDING, false)) {
+            startBellBlink();
+        }
         expiryHandler.removeCallbacks(expiryCheck);
         expiryCheck.run();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        IntentFilter filter = new IntentFilter(ACTION_NEW_ACCESS_REQUEST);
+        ContextCompat.registerReceiver(this, notificationReceiver, filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED);
+        notificationReceiverRegistered = true;
+    }
+
+    @Override
+    protected void onStop() {
+        if (notificationReceiverRegistered) {
+            unregisterReceiver(notificationReceiver);
+            notificationReceiverRegistered = false;
+        }
+        super.onStop();
     }
 
     @Override
@@ -184,7 +230,19 @@ public class AdminDashboardActivity extends AppCompatActivity {
         btnExpiredBell = new Button(this);
         btnExpiredBell.setText("🔔");
         btnExpiredBell.setContentDescription("Expired trial users");
-        btnExpiredBell.setOnClickListener(v -> showExpiredUsers());
+        btnExpiredBell.setTextColor(BELL_IDLE_COLOR);
+        btnExpiredBell.setOnClickListener(v -> {
+            boolean hasNewRequest = getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE)
+                    .getBoolean(KEY_NEW_REQUEST_PENDING, false);
+            getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(KEY_NEW_REQUEST_PENDING, false).apply();
+            stopBellBlink();
+            if (hasNewRequest) {
+                selectFilter(Filter.PENDING);
+            } else {
+                showExpiredUsers();
+            }
+        });
         bellContainer.addView(btnExpiredBell, new FrameLayout.LayoutParams(
                 dp(64), LinearLayout.LayoutParams.WRAP_CONTENT));
         txtExpiredBellDot = new TextView(this);
@@ -331,8 +389,9 @@ public class AdminDashboardActivity extends AppCompatActivity {
         cbManualDrums = makeCheckBox("Drums", false);
         cbManualPro = makeCheckBox("Pro", false);
         cbManualPiano = makeCheckBox("Piano", false);
+        cbManualSpd30 = makeCheckBox("SPD-30", false);
         addAccessCheckboxRows(cbRows, cbManualFull, cbManualLoops, cbManualDrums,
-                cbManualPro, cbManualPiano);
+                cbManualPro, cbManualPiano, cbManualSpd30);
         root.addView(cbRows, matchWidth(dp(2)));
 
         Button btnManualActivate = new Button(this);
@@ -358,16 +417,33 @@ public class AdminDashboardActivity extends AppCompatActivity {
     }
 
     private void updatePending(DataSnapshot snapshot) {
+        android.content.SharedPreferences notificationPrefs =
+                getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE);
+        Set<String> knownUids = new HashSet<>(notificationPrefs.getStringSet(
+                KEY_KNOWN_PENDING_UIDS, new HashSet<>()));
+        Set<String> currentUids = new HashSet<>();
+        boolean hasNewRequest = false;
         pendingRequests.clear();
         for (DataSnapshot child : snapshot.getChildren()) {
             PendingEntry entry = new PendingEntry();
             entry.uid = child.getKey();
+            if (entry.uid != null) {
+                currentUids.add(entry.uid);
+                if (!knownUids.contains(entry.uid)) hasNewRequest = true;
+            }
             entry.email = readText(child.child("email"));
             entry.displayName = readText(child.child("displayName"));
             entry.timestamp = readTimestamp(child.child("timestamp"));
             pendingRequests.add(entry);
         }
         pendingRequests.sort((left, right) -> Long.compare(right.timestamp, left.timestamp));
+        if (hasNewRequest) {
+            notificationPrefs.edit().putBoolean(KEY_NEW_REQUEST_PENDING, true).apply();
+        }
+        notificationPrefs.edit().putStringSet(KEY_KNOWN_PENDING_UIDS, currentUids).apply();
+        if (hasNewRequest || notificationPrefs.getBoolean(KEY_NEW_REQUEST_PENDING, false)) {
+            startBellBlink();
+        }
         applySearchAndFilter();
     }
 
@@ -397,7 +473,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
         CheckBox cbDrums = makeCheckBox("Drums", false);
         CheckBox cbPro = makeCheckBox("Pro", false);
         CheckBox cbPiano = makeCheckBox("Piano", false);
-        addAccessCheckboxRows(cbRows, cbFull, cbLoops, cbDrums, cbPro, cbPiano);
+        CheckBox cbSpd30 = makeCheckBox("SPD-30", false);
+        addAccessCheckboxRows(cbRows, cbFull, cbLoops, cbDrums, cbPro, cbPiano, cbSpd30);
         row.addView(cbRows);
 
         // Action buttons
@@ -410,7 +487,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         btnActivate.setOnClickListener(v ->
                 showActivationTypeDialog(uid, email, displayName,
                         cbFull.isChecked(), cbLoops.isChecked(), cbDrums.isChecked(),
-                        cbPro.isChecked(), cbPiano.isChecked()));
+                        cbPro.isChecked(), cbPiano.isChecked(), cbSpd30.isChecked()));
         btnRow.addView(btnActivate, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -584,6 +661,9 @@ public class AdminDashboardActivity extends AppCompatActivity {
         entry.hasDrums = readAppAccess(appsSnap, "drums");
         entry.hasPro = appsSnap.exists() && readAppAccess(appsSnap, "pro");
         entry.hasPiano = appsSnap.exists() && readAppAccess(appsSnap, "piano");
+        entry.hasSpd30 = appsSnap.exists()
+                && (readAppAccess(appsSnap, "spd30")
+                || (!appsSnap.child("spd30").exists() && readAppAccess(appsSnap, "pro")));
 
         entry.activatedAt = readTimestamp(child.child("activatedAt"));
         entry.expiresAt = readTimestamp(child.child("expiresAt"));
@@ -762,6 +842,25 @@ public class AdminDashboardActivity extends AppCompatActivity {
                         : "No expired trial users");
     }
 
+    private void startBellBlink() {
+        if (btnExpiredBell == null || bellBlinkAnimator != null) return;
+        bellBlinkAnimator = ValueAnimator.ofArgb(0xffff2222, BELL_IDLE_COLOR);
+        bellBlinkAnimator.setDuration(450);
+        bellBlinkAnimator.setRepeatMode(ValueAnimator.REVERSE);
+        bellBlinkAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        bellBlinkAnimator.addUpdateListener(animation ->
+                btnExpiredBell.setTextColor((Integer) animation.getAnimatedValue()));
+        bellBlinkAnimator.start();
+    }
+
+    private void stopBellBlink() {
+        if (bellBlinkAnimator != null) {
+            bellBlinkAnimator.cancel();
+            bellBlinkAnimator = null;
+        }
+        if (btnExpiredBell != null) btnExpiredBell.setTextColor(BELL_IDLE_COLOR);
+    }
+
     private void showExpiredUsers() {
         List<UserEntry> expired = getExpiredTrialUsers();
         if (expired.isEmpty()) {
@@ -813,7 +912,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
                         + (entry.hasLoops ? "✅Loops " : "❌Loops ")
                         + (entry.hasDrums ? "✅Drums " : "❌Drums ")
                         + (entry.hasPro ? "✅Pro " : "❌Pro ")
-                        + (entry.hasPiano ? "✅Piano" : "❌Piano")
+                        + (entry.hasPiano ? "✅Piano " : "❌Piano ")
+                        + (entry.hasSpd30 ? "✅SPD-30" : "❌SPD-30")
                         + (entry.deviceToken != null ? "  |  🔒 Device locked" : "  |  🔓 Unlocked"));
 
         // Action buttons
@@ -839,7 +939,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
             btnGrantAccess.setOnClickListener(v ->
                     showEditAppsDialog(entry.uid, entry.email, entry.displayName,
                             entry.hasFull, entry.hasLoops, entry.hasDrums, entry.hasPro,
-                            entry.hasPiano));
+                            entry.hasPiano, entry.hasSpd30));
             btnRow.addView(btnGrantAccess, new LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         } else {
@@ -858,7 +958,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
             btnEdit.setOnClickListener(v ->
                     showEditAppsDialog(entry.uid, entry.email, entry.displayName,
                             entry.hasFull, entry.hasLoops, entry.hasDrums, entry.hasPro,
-                            entry.hasPiano));
+                            entry.hasPiano, entry.hasSpd30));
             btnRow.addView(btnEdit, ep);
 
             if (!TextUtils.isEmpty(entry.deviceToken)) {
@@ -888,11 +988,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
         CheckBox cbDrums = makeCheckBox("Drums", false);
         CheckBox cbPro = makeCheckBox("Pro", false);
         CheckBox cbPiano = makeCheckBox("Piano", false);
-        layout.addView(cbFull);
-        layout.addView(cbLoops);
-        layout.addView(cbDrums);
-        layout.addView(cbPro);
-        layout.addView(cbPiano);
+        CheckBox cbSpd30 = makeCheckBox("SPD-30", false);
+        addAccessCheckboxRows(layout, cbFull, cbLoops, cbDrums, cbPro, cbPiano, cbSpd30);
 
         new AlertDialog.Builder(this)
                 .setTitle("Grant app access")
@@ -901,7 +998,8 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 .setPositiveButton("Activate", (dialog, which) ->
                         activateUser(entry.uid, entry.email, entry.displayName,
                                 cbFull.isChecked(), cbLoops.isChecked(), cbDrums.isChecked(),
-                                cbPro.isChecked(), cbPiano.isChecked(), false, 0))
+                                cbPro.isChecked(), cbPiano.isChecked(),
+                                cbSpd30.isChecked(), false, 0))
                 .setNegativeButton("Cancel", null)
                 .show();
     }
@@ -910,17 +1008,17 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void showActivationTypeDialog(String uid, String email, String displayName,
                                           boolean full, boolean loops, boolean drums,
-                                          boolean pro, boolean piano) {
+                                          boolean pro, boolean piano, boolean spd30) {
         String[] choices = {"Permanent", "Trial"};
         new AlertDialog.Builder(this)
                 .setTitle("Access duration")
                 .setItems(choices, (dialog, index) -> {
                     if (index == 0) {
                         activateUser(uid, email, displayName,
-                                full, loops, drums, pro, piano, false, 0);
+                                full, loops, drums, pro, piano, spd30, false, 0);
                     } else {
                         showTrialExpiryPicker(uid, email, displayName,
-                                full, loops, drums, pro, piano);
+                                full, loops, drums, pro, piano, spd30);
                     }
                 })
                 .setNegativeButton("Cancel", null)
@@ -929,7 +1027,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void showTrialExpiryPicker(String uid, String email, String displayName,
                                        boolean full, boolean loops, boolean drums,
-                                       boolean pro, boolean piano) {
+                                       boolean pro, boolean piano, boolean spd30) {
         Calendar initial = Calendar.getInstance();
         initial.add(Calendar.DAY_OF_YEAR, 1);
         DatePickerDialog datePicker = new DatePickerDialog(
@@ -952,7 +1050,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
                                     return;
                                 }
                                 activateUser(uid, email, displayName,
-                                        full, loops, drums, pro, piano, true, expiresAt);
+                                        full, loops, drums, pro, piano, spd30, true, expiresAt);
                             },
                             initial.get(Calendar.HOUR_OF_DAY),
                             initial.get(Calendar.MINUTE),
@@ -968,7 +1066,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void activateUser(String uid, String email, String displayName,
                               boolean full, boolean loops, boolean drums, boolean pro,
-                              boolean piano,
+                              boolean piano, boolean spd30,
                               boolean trial, long expiresAt) {
         Map<String, Object> data = new HashMap<>();
         data.put("email",       email != null ? email : "");
@@ -983,6 +1081,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         appsMap.put("drums", drums);
         appsMap.put("pro", pro);
         appsMap.put("piano", piano);
+        appsMap.put("spd30", spd30);
         data.put("allowedApps", appsMap);
 
         usersRef.child(uid).setValue(data).addOnCompleteListener(this, saveTask -> {
@@ -1018,13 +1117,14 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void saveAllowedApps(String uid, String email,
                                  boolean full, boolean loops, boolean drums, boolean pro,
-                                 boolean piano) {
+                                 boolean piano, boolean spd30) {
         Map<String, Object> appsMap = new HashMap<>();
         appsMap.put("full",  full);
         appsMap.put("loops", loops);
         appsMap.put("drums", drums);
         appsMap.put("pro", pro);
         appsMap.put("piano", piano);
+        appsMap.put("spd30", spd30);
         usersRef.child(uid).child("allowedApps").setValue(appsMap)
                 .addOnCompleteListener(this, task -> {
                     if (!task.isSuccessful()) {
@@ -1150,6 +1250,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
         appsMap.put("drums", cbManualDrums.isChecked());
         appsMap.put("pro", cbManualPro.isChecked());
         appsMap.put("piano", cbManualPiano.isChecked());
+        appsMap.put("spd30", cbManualSpd30.isChecked());
         data.put("allowedApps", appsMap);
 
         usersRef.child(uid).setValue(data);
@@ -1159,7 +1260,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
     private void showEditAppsDialog(String uid, String email, String displayName,
                                     boolean curFull, boolean curLoops, boolean curDrums,
-                                    boolean curPro, boolean curPiano) {
+                                    boolean curPro, boolean curPiano, boolean curSpd30) {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(20);
@@ -1170,11 +1271,13 @@ public class AdminDashboardActivity extends AppCompatActivity {
         CheckBox cbDrums = makeCheckBox("Drums (com.pramod.loopmidi.drums)",  curDrums);
         CheckBox cbPro = makeCheckBox("Pro (com.pramod.loopmidi.pro)", curPro);
         CheckBox cbPiano = makeCheckBox("Piano (com.pramod.piano)", curPiano);
+        CheckBox cbSpd30 = makeCheckBox("SPD-30 (pramod.octapad.spd30)", curSpd30);
         layout.addView(cbFull);
         layout.addView(cbLoops);
         layout.addView(cbDrums);
         layout.addView(cbPro);
         layout.addView(cbPiano);
+        layout.addView(cbSpd30);
 
         new AlertDialog.Builder(this)
                 .setTitle("APK Access — " + (!TextUtils.isEmpty(email) ? email : uid))
@@ -1182,7 +1285,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 .setPositiveButton("Save", (d, w) ->
                         saveAllowedApps(uid, email,
                                 cbFull.isChecked(), cbLoops.isChecked(), cbDrums.isChecked(),
-                                cbPro.isChecked(), cbPiano.isChecked()))
+                                cbPro.isChecked(), cbPiano.isChecked(), cbSpd30.isChecked()))
                 .setNegativeButton("Cancel", null)
                 .show();
     }

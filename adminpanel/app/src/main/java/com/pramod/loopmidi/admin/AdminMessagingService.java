@@ -20,6 +20,13 @@ public class AdminMessagingService extends FirebaseMessagingService {
     @Override
     public void onMessageReceived(RemoteMessage message) {
         AdminNotifications.createNotificationChannel(this);
+        getSharedPreferences(AdminDashboardActivity.NOTIFICATION_PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean(AdminDashboardActivity.KEY_NEW_REQUEST_PENDING, true)
+                .apply();
+        Intent requestIntent = new Intent(AdminDashboardActivity.ACTION_NEW_ACCESS_REQUEST);
+        requestIntent.setPackage(getPackageName());
+        sendBroadcast(requestIntent);
 
         RemoteMessage.Notification remoteNotification = message.getNotification();
         String title = remoteNotification != null && remoteNotification.getTitle() != null

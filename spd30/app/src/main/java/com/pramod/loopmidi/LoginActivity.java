@@ -228,7 +228,10 @@ public class LoginActivity extends Activity {
                 DataSnapshot appsSnap = snapshot.child("allowedApps");
                 boolean requiresExplicitGrant = BuildConfig.FLAVOR.equals("pro");
                 if (appsSnap.exists() || requiresExplicitGrant) {
-                    Boolean allowed = appsSnap.child(BuildConfig.FLAVOR).getValue(Boolean.class);
+                    Boolean allowed = appsSnap.child("spd30").getValue(Boolean.class);
+                    if (allowed == null) {
+                        allowed = appsSnap.child(BuildConfig.FLAVOR).getValue(Boolean.class);
+                    }
                     if (allowed == null || !allowed) {
                         runOnUiThread(() -> {
                             if (txtLoginStatus != null)
@@ -413,7 +416,7 @@ public class LoginActivity extends Activity {
             case "full":  return "Full";
             case "loops": return "Loops";
             case "drums": return "Drums";
-            case "pro":   return "Pro";
+            case "pro":   return "SPD-30";
             default:      return flavor;
         }
     }
