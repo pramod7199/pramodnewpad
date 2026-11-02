@@ -25,67 +25,146 @@
             <LinearLayout
                 android:id="@+id/topBankContent"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
+                android:layout_height="84dp"
                 android:background="@drawable/spd30_control_panel"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="2dp">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="2.2"
-                android:gravity="center_vertical"
                 android:orientation="vertical"
-                android:paddingLeft="5dp">
-
-                <TextView
-                    android:id="@+id/txtBrand"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:shadowColor="#66000000"
-                    android:shadowDx="2"
-                    android:shadowDy="2"
-                    android:shadowRadius="2"
-                    android:text="PRAMOD OCTAPAD SPD-30"
-                    android:textColor="#ffffffff"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/txtMidiStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="MIDI: disconnected"
-                    android:textColor="#ff28613d"
-                    android:textSize="8sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/favDrumRow"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="9.8"
-                android:background="@drawable/spd30_control_panel"
-                android:orientation="horizontal"
                 android:padding="2dp">
 
-                <Button android:id="@+id/favDrum1" style="@style/SpdFavoriteButton" android:text="FAV 1" />
-                <Button android:id="@+id/favDrum2" style="@style/SpdFavoriteButton" android:text="FAV 2" />
-                <Button android:id="@+id/favDrum3" style="@style/SpdFavoriteButton" android:text="FAV 3" />
-                <Button android:id="@+id/favDrum4" style="@style/SpdFavoriteButton" android:text="FAV 4" />
-                <Button android:id="@+id/favDrum5" style="@style/SpdFavoriteButton" android:text="FAV 5" />
-                <Button android:id="@+id/favDrum6" style="@style/SpdFavoriteButton" android:text="FAV 6" />
-                <Button android:id="@+id/favDrum7" style="@style/SpdFavoriteButton" android:text="FAV 7" />
-                <Button android:id="@+id/favDrum8" style="@style/SpdFavoriteButton" android:text="FAV 8" />
-                <Button android:id="@+id/favDrum9" style="@style/SpdFavoriteButton" android:text="FAV 9" />
-                <Button android:id="@+id/favDrum10" style="@style/SpdFavoriteButton" android:text="FAV 10" />
-            </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingLeft="5dp"
+                    android:paddingRight="5dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="2.2"
+                        android:gravity="center_vertical"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/txtBrand"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:shadowColor="#66000000"
+                            android:shadowDx="2"
+                            android:shadowDy="2"
+                            android:shadowRadius="2"
+                            android:text="PRAMOD OCTAPAD SPD-30"
+                            android:textColor="#ffffffff"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/txtMidiStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="MIDI: disconnected"
+                            android:textColor="#ff28613d"
+                            android:textSize="8sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/txtKitName"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_marginLeft="5dp"
+                        android:layout_marginRight="4dp"
+                        android:layout_weight="3.8"
+                        android:background="@drawable/spd30_lcd"
+                        android:ellipsize="marquee"
+                        android:gravity="center"
+                        android:paddingLeft="6dp"
+                        android:paddingRight="6dp"
+                        android:singleLine="true"
+                        android:text="KIT 1"
+                        android:textColor="#ff102c3b"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnPrevKit"
+                        style="@style/SpdControlButton"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="0.75"
+                        android:background="@drawable/spd30_key_gray"
+                        android:text="−"
+                        android:textSize="16sp" />
+
+                    <Button
+                        android:id="@+id/btnNextKit"
+                        style="@style/SpdControlButton"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="0.75"
+                        android:background="@drawable/spd30_key_gray"
+                        android:text="+"
+                        android:textSize="16sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:id="@+id/favDrumRow"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="10"
+                        android:background="@drawable/spd30_control_panel"
+                        android:orientation="horizontal"
+                        android:padding="1dp">
+
+                        <Button android:id="@+id/favDrum1" style="@style/SpdFavoriteButton" android:text="FAV 1" />
+                        <Button android:id="@+id/favDrum2" style="@style/SpdFavoriteButton" android:text="FAV 2" />
+                        <Button android:id="@+id/favDrum3" style="@style/SpdFavoriteButton" android:text="FAV 3" />
+                        <Button android:id="@+id/favDrum4" style="@style/SpdFavoriteButton" android:text="FAV 4" />
+                        <Button android:id="@+id/favDrum5" style="@style/SpdFavoriteButton" android:text="FAV 5" />
+                        <Button android:id="@+id/favDrum6" style="@style/SpdFavoriteButton" android:text="FAV 6" />
+                        <Button android:id="@+id/favDrum7" style="@style/SpdFavoriteButton" android:text="FAV 7" />
+                        <Button android:id="@+id/favDrum8" style="@style/SpdFavoriteButton" android:text="FAV 8" />
+                        <Button android:id="@+id/favDrum9" style="@style/SpdFavoriteButton" android:text="FAV 9" />
+                        <Button android:id="@+id/favDrum10" style="@style/SpdFavoriteButton" android:text="FAV 10" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btnBankA"
+                        style="@style/SpdControlButton"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.9"
+                        android:layout_margin="1dp"
+                        android:text="BANK A"
+                        android:textSize="8sp" />
+                    <Button
+                        android:id="@+id/btnBankB"
+                        style="@style/SpdControlButton"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.9"
+                        android:layout_margin="1dp"
+                        android:text="BANK B"
+                        android:textSize="8sp" />
+                    <Button
+                        android:id="@+id/btnBankAB"
+                        style="@style/SpdControlButton"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.9"
+                        android:layout_margin="1dp"
+                        android:text="A+B"
+                        android:textSize="8sp" />
+                </LinearLayout>
             </LinearLayout>
 
             <FrameLayout
@@ -286,23 +365,9 @@
             <LinearLayout
                 android:id="@+id/topControlBar"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:background="#ff242628"
-                android:gravity="center_vertical"
+                android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:padding="3dp">
-
-                <Button
-                    android:id="@+id/btnPrevKit"
-                    style="@style/SpdControlButton"
-                    android:layout_weight="1"
-                    android:text="◀" />
-
-                <Button
-                    android:id="@+id/btnNextKit"
-                    style="@style/SpdControlButton"
-                    android:layout_weight="1"
-                    android:text="▶" />
+                android:visibility="gone">
 
                 <Button
                     android:id="@+id/btnLoops"
@@ -316,37 +381,6 @@
                     android:onClick="onStopLoopClick"
                     android:text="STOP"
                     android:visibility="gone" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="88dp"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/spd30_control_panel"
-                android:orientation="vertical"
-                android:padding="7dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="KIT / LCD"
-                    android:textColor="#ff8bc7e4"
-                    android:textSize="9sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/txtKitName"
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/spd30_lcd"
-                    android:gravity="center_vertical"
-                    android:paddingLeft="8dp"
-                    android:paddingRight="8dp"
-                    android:text="KIT 1"
-                    android:textColor="#ff102c3b"
-                    android:textSize="20sp"
-                    android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
@@ -424,9 +458,6 @@
                     android:textSize="10sp"
                     android:textStyle="bold" />
 
-                <Button android:id="@+id/btnBankA" style="@style/SpdControlButton" android:text="A" />
-                <Button android:id="@+id/btnBankB" style="@style/SpdControlButton" android:text="B" />
-                <Button android:id="@+id/btnBankAB" style="@style/SpdControlButton" android:text="A+B" />
             </LinearLayout>
 
             <LinearLayout
