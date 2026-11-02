@@ -477,10 +477,7 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
             midiDeviceInput.close();
             midiDeviceInput = null;
         }
-        if (midiInputReceiver != null) {
-            midiInputReceiver.close();
-            midiInputReceiver = null;
-        }
+        midiInputReceiver = null;
         if (midiDevice != null) {
             midiDevice.close();
             midiDevice = null;
