@@ -316,7 +316,7 @@ public class AdminDashboardActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(uidRow, matchWidth(dp(4)));
 
-        // APK checkboxes (all checked by default)
+        // APK checkboxes start unchecked to avoid granting access accidentally.
         TextView apkLabel = new TextView(this);
         apkLabel.setText("Kis APK ka access dena hai:");
         apkLabel.setTextColor(0xffaaaaaa);
@@ -326,9 +326,9 @@ public class AdminDashboardActivity extends AppCompatActivity {
 
         LinearLayout cbRows = new LinearLayout(this);
         cbRows.setOrientation(LinearLayout.VERTICAL);
-        cbManualFull  = makeCheckBox("Full",  true);
-        cbManualLoops = makeCheckBox("Loops", true);
-        cbManualDrums = makeCheckBox("Drums", true);
+        cbManualFull  = makeCheckBox("Full",  false);
+        cbManualLoops = makeCheckBox("Loops", false);
+        cbManualDrums = makeCheckBox("Drums", false);
         cbManualPro = makeCheckBox("Pro", false);
         cbManualPiano = makeCheckBox("Piano", false);
         addAccessCheckboxRows(cbRows, cbManualFull, cbManualLoops, cbManualDrums,
@@ -389,12 +389,12 @@ public class AdminDashboardActivity extends AppCompatActivity {
         apkLabel.setPadding(0, dp(6), 0, dp(2));
         row.addView(apkLabel);
 
-        // Checkboxes — all ticked by default
+        // Keep new access grants explicit; all apps start unchecked.
         LinearLayout cbRows = new LinearLayout(this);
         cbRows.setOrientation(LinearLayout.VERTICAL);
-        CheckBox cbFull  = makeCheckBox("Full",  true);
-        CheckBox cbLoops = makeCheckBox("Loops", true);
-        CheckBox cbDrums = makeCheckBox("Drums", true);
+        CheckBox cbFull  = makeCheckBox("Full",  false);
+        CheckBox cbLoops = makeCheckBox("Loops", false);
+        CheckBox cbDrums = makeCheckBox("Drums", false);
         CheckBox cbPro = makeCheckBox("Pro", false);
         CheckBox cbPiano = makeCheckBox("Piano", false);
         addAccessCheckboxRows(cbRows, cbFull, cbLoops, cbDrums, cbPro, cbPiano);
@@ -883,9 +883,9 @@ public class AdminDashboardActivity extends AppCompatActivity {
         int pad = dp(20);
         layout.setPadding(pad, pad, pad, pad);
 
-        CheckBox cbFull = makeCheckBox("Full", true);
-        CheckBox cbLoops = makeCheckBox("Loops", true);
-        CheckBox cbDrums = makeCheckBox("Drums", true);
+        CheckBox cbFull = makeCheckBox("Full", false);
+        CheckBox cbLoops = makeCheckBox("Loops", false);
+        CheckBox cbDrums = makeCheckBox("Drums", false);
         CheckBox cbPro = makeCheckBox("Pro", false);
         CheckBox cbPiano = makeCheckBox("Piano", false);
         layout.addView(cbFull);
