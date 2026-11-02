@@ -1658,10 +1658,14 @@ public class MainActivity extends Activity {
     private void setProPanelCollapsed(boolean collapsed) {
         if (proPanelCollapsed == collapsed) return;
         proPanelCollapsed = collapsed;
-        animateProPanelSection(findViewById(R.id.topPanelDetails),
+        animateProPanelSection(findViewById(proPanelDetailsViewId()),
                 collapsed ? 0 : dp(54));
         animateProPanelSection(findViewById(R.id.favDrumRow),
                 collapsed ? 0 : dp(22));
+    }
+
+    private int proPanelDetailsViewId() {
+        return getResources().getIdentifier("topPanelDetails", "id", getPackageName());
     }
 
     private void animateProPanelSection(View section, int targetHeight) {
@@ -1705,7 +1709,7 @@ public class MainActivity extends Activity {
                 if (section.getTag() != heightAnimation) return;
                 android.view.ViewGroup.LayoutParams params = section.getLayoutParams();
                 params.height = targetHeight == 0
-                        ? (section.getId() == R.id.topPanelDetails ? dp(54) : dp(22))
+                        ? (section.getId() == proPanelDetailsViewId() ? dp(54) : dp(22))
                         : targetHeight;
                 section.setLayoutParams(params);
                 section.setAlpha(targetHeight == 0 ? 0f : 1f);
