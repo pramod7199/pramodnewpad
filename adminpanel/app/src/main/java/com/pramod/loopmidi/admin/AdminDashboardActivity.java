@@ -324,19 +324,16 @@ public class AdminDashboardActivity extends AppCompatActivity {
         apkLabel.setPadding(0, dp(4), 0, dp(2));
         root.addView(apkLabel, matchWidth(0));
 
-        LinearLayout cbRow = new LinearLayout(this);
-        cbRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout cbRows = new LinearLayout(this);
+        cbRows.setOrientation(LinearLayout.VERTICAL);
         cbManualFull  = makeCheckBox("Full",  true);
         cbManualLoops = makeCheckBox("Loops", true);
         cbManualDrums = makeCheckBox("Drums", true);
         cbManualPro = makeCheckBox("Pro", false);
         cbManualPiano = makeCheckBox("Piano", false);
-        cbRow.addView(cbManualFull);
-        cbRow.addView(cbManualLoops);
-        cbRow.addView(cbManualDrums);
-        cbRow.addView(cbManualPro);
-        cbRow.addView(cbManualPiano);
-        root.addView(cbRow, matchWidth(dp(2)));
+        addAccessCheckboxRows(cbRows, cbManualFull, cbManualLoops, cbManualDrums,
+                cbManualPro, cbManualPiano);
+        root.addView(cbRows, matchWidth(dp(2)));
 
         Button btnManualActivate = new Button(this);
         btnManualActivate.setText("Activate");
@@ -393,19 +390,15 @@ public class AdminDashboardActivity extends AppCompatActivity {
         row.addView(apkLabel);
 
         // Checkboxes — all ticked by default
-        LinearLayout cbRow = new LinearLayout(this);
-        cbRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout cbRows = new LinearLayout(this);
+        cbRows.setOrientation(LinearLayout.VERTICAL);
         CheckBox cbFull  = makeCheckBox("Full",  true);
         CheckBox cbLoops = makeCheckBox("Loops", true);
         CheckBox cbDrums = makeCheckBox("Drums", true);
         CheckBox cbPro = makeCheckBox("Pro", false);
         CheckBox cbPiano = makeCheckBox("Piano", false);
-        cbRow.addView(cbFull);
-        cbRow.addView(cbLoops);
-        cbRow.addView(cbDrums);
-        cbRow.addView(cbPro);
-        cbRow.addView(cbPiano);
-        row.addView(cbRow);
+        addAccessCheckboxRows(cbRows, cbFull, cbLoops, cbDrums, cbPro, cbPiano);
+        row.addView(cbRows);
 
         // Action buttons
         LinearLayout btnRow = new LinearLayout(this);
@@ -1032,8 +1025,20 @@ public class AdminDashboardActivity extends AppCompatActivity {
         appsMap.put("drums", drums);
         appsMap.put("pro", pro);
         appsMap.put("piano", piano);
-        usersRef.child(uid).child("allowedApps").setValue(appsMap);
-        Toast.makeText(this, "Access updated: " + (email != null ? email : uid), Toast.LENGTH_SHORT).show();
+        usersRef.child(uid).child("allowedApps").setValue(appsMap)
+                .addOnCompleteListener(this, task -> {
+                    if (!task.isSuccessful()) {
+                        android.util.Log.e("AdminDashboard",
+                                "Could not update app access for " + uid,
+                                task.getException());
+                        Toast.makeText(this, "Access update failed. Please try again.",
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    Toast.makeText(this,
+                            "Access updated: " + (email != null ? email : uid),
+                            Toast.LENGTH_SHORT).show();
+                });
     }
 
     /** Deactivate: move from authorizedUsers to deactivatedUsers (instead of deleting). */
@@ -1226,6 +1231,19 @@ public class AdminDashboardActivity extends AppCompatActivity {
         p.rightMargin = dp(16);
         cb.setLayoutParams(p);
         return cb;
+    }
+
+    private void addAccessCheckboxRows(LinearLayout container, CheckBox... checkboxes) {
+        final int checkboxesPerRow = 3;
+        for (int start = 0; start < checkboxes.length; start += checkboxesPerRow) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            int end = Math.min(start + checkboxesPerRow, checkboxes.length);
+            for (int index = start; index < end; index++) {
+                row.addView(checkboxes[index]);
+            }
+            container.addView(row, matchWidth(0));
+        }
     }
 
     private TextView sectionHeader(String text) {

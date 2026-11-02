@@ -93,7 +93,7 @@ public final class PianoKeyboardView extends View {
             float keyBottom = keybedBottom - 2f * density;
             paint.setShader(new LinearGradient(0, keybedTop, 0, keyBottom,
                     isNotePressed(note)
-                            ? new int[]{0xFFE9F2FF, 0xFF9FC6FF, 0xFF6D9FE4}
+                            ? new int[]{0xFFD8E9FF, 0xFF76B0FF, 0xFF397FD8}
                             : new int[]{0xFFFFFFFF, 0xFFF9F8F3, 0xFFE6E2D9},
                     null, Shader.TileMode.CLAMP));
             paint.setStyle(Paint.Style.FILL);
@@ -103,6 +103,7 @@ public final class PianoKeyboardView extends View {
             paint.setColor(0xFF111827);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(1f, density));
+            if (isNotePressed(note)) paint.setColor(0xFF1458A8);
             canvas.drawRoundRect(new RectF(left + gap, keybedTop, right - gap, keyBottom),
                     2f * density, 2f * density, paint);
             drawLabel(canvas, note, (left + right) * 0.5f,
@@ -121,16 +122,16 @@ public final class PianoKeyboardView extends View {
                 paint.setStyle(Paint.Style.FILL);
                 paint.setShader(new LinearGradient(left, keybedTop, right, blackKeyBottom,
                         isNotePressed(note)
-                                ? new int[]{0xFF83B7FA, 0xFF326CAC, 0xFF17457D}
+                                ? new int[]{0xFF9CCBFF, 0xFF347FD4, 0xFF17457D}
                                 : new int[]{0xFF41464D, 0xFF15181D, 0xFF050608},
                         null, Shader.TileMode.CLAMP));
                 float radius = 3f * density;
                 RectF blackKey = new RectF(left, keybedTop, right, blackKeyBottom);
                 canvas.drawRoundRect(blackKey, radius, radius, paint);
                 paint.setShader(null);
-                paint.setColor(0xFF050608);
+                paint.setColor(isNotePressed(note) ? 0xFFC6E1FF : 0xFF050608);
                 paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(Math.max(1f, density));
+                paint.setStrokeWidth((isNotePressed(note) ? 2f : 1f) * density);
                 canvas.drawRoundRect(blackKey, radius, radius, paint);
                 drawLabel(canvas, note, centerX,
                         blackKeyBottom - 8f * density, 0xFFFFFFFF, 7f);
@@ -215,16 +216,34 @@ public final class PianoKeyboardView extends View {
         int note = activePointers.get(pointerId, -1);
         if (note >= 0) {
             activePointers.delete(pointerId);
-            boolean noteStillPressed = false;
-            for (int i = 0; i < activePointers.size(); i++) {
-                if (activePointers.valueAt(i) == note) {
-                    noteStillPressed = true;
-                    break;
-                }
-            }
-            if (!noteStillPressed && listener != null) listener.onNoteOff(note);
+            releaseNoteIfUnused(note);
             invalidate();
         }
+    }
+
+    private void updatePointerNote(int pointerId, int newNote) {
+        int previousNote = activePointers.get(pointerId, -1);
+        if (previousNote == newNote) return;
+        if (previousNote >= 0) {
+            activePointers.delete(pointerId);
+            releaseNoteIfUnused(previousNote);
+        }
+        boolean noteWasAlreadyActive = isNoteActive(newNote);
+        activePointers.put(pointerId, newNote);
+        if (!noteWasAlreadyActive && listener != null) listener.onNoteOn(newNote);
+        invalidate();
+    }
+
+    private void releaseNoteIfUnused(int note) {
+        if (isNoteActive(note)) return;
+        if (listener != null) listener.onNoteOff(note);
+    }
+
+    private boolean isNoteActive(int note) {
+        for (int i = 0; i < activePointers.size(); i++) {
+            if (activePointers.valueAt(i) == note) return true;
+        }
+        return false;
     }
 
     @Override
@@ -240,11 +259,19 @@ public final class PianoKeyboardView extends View {
         int pointerIndex = event.getActionIndex();
         int pointerId = event.getPointerId(pointerIndex);
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-            int note = noteAt(event.getX(pointerIndex), event.getY(pointerIndex))
-                    + transposeSemitones;
-            activePointers.put(pointerId, note);
-            if (listener != null) listener.onNoteOn(note);
-            invalidate();
+            updatePointerNote(pointerId,
+                    noteAt(event.getX(pointerIndex), event.getY(pointerIndex))
+                            + transposeSemitones);
+            return true;
+        }
+        if (action == MotionEvent.ACTION_MOVE) {
+            for (int i = 0; i < event.getPointerCount(); i++) {
+                int movedPointerId = event.getPointerId(i);
+                if (activePointers.indexOfKey(movedPointerId) >= 0) {
+                    updatePointerNote(movedPointerId,
+                            noteAt(event.getX(i), event.getY(i)) + transposeSemitones);
+                }
+            }
             return true;
         }
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
