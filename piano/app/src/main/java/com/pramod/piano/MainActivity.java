@@ -391,7 +391,7 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
         }
         if (forInput) {
             if (midiDeviceOutput != null) {
-                midiDeviceOutput.close();
+                closeMidiResource(midiDeviceOutput, "MIDI input port");
                 midiDeviceOutput = null;
             }
             midiDeviceOutput = midiDevice.openOutputPort(selectedPort.getPortNumber());
@@ -405,17 +405,11 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
                     receiveMidiMessages(data, offset, count);
                 }
             };
-            try {
-                midiDeviceOutput.connect(midiInputReceiver);
-                status.setText("USB MIDI IN connected");
-            } catch (IOException error) {
-                midiDeviceOutput.close();
-                midiDeviceOutput = null;
-                status.setText("Could not connect MIDI input: " + error.getMessage());
-            }
+            midiDeviceOutput.connect(midiInputReceiver);
+            status.setText("USB MIDI IN connected");
         } else {
             if (midiDeviceInput != null) {
-                midiDeviceInput.close();
+                closeMidiResource(midiDeviceInput, "MIDI output port");
                 midiDeviceInput = null;
             }
             midiDeviceInput = midiDevice.openInputPort(selectedPort.getPortNumber());
@@ -463,26 +457,50 @@ public final class MainActivity extends Activity implements PianoKeyboardView.No
             midiDeviceInput.send(message, 0, message.length, System.nanoTime());
         } catch (IOException error) {
             status.setText("MIDI OUT failed: " + error.getMessage());
-            midiDeviceInput.close();
+            closeMidiResource(midiDeviceInput, "MIDI output port");
             midiDeviceInput = null;
         }
     }
 
     private void closeMidiDevice() {
         if (midiDeviceOutput != null) {
-            midiDeviceOutput.close();
+            closeMidiResource(midiDeviceOutput, "MIDI input port");
             midiDeviceOutput = null;
         }
         if (midiDeviceInput != null) {
-            midiDeviceInput.close();
+            closeMidiResource(midiDeviceInput, "MIDI output port");
             midiDeviceInput = null;
         }
         midiInputReceiver = null;
         if (midiDevice != null) {
-            midiDevice.close();
+            closeMidiResource(midiDevice, "MIDI device");
             midiDevice = null;
         }
         midiDeviceId = -1;
+    }
+
+    private void closeMidiResource(MidiInputPort resource, String name) {
+        try {
+            resource.close();
+        } catch (IOException error) {
+            android.util.Log.w("Piano", "Could not close " + name, error);
+        }
+    }
+
+    private void closeMidiResource(MidiOutputPort resource, String name) {
+        try {
+            resource.close();
+        } catch (IOException error) {
+            android.util.Log.w("Piano", "Could not close " + name, error);
+        }
+    }
+
+    private void closeMidiResource(MidiDevice resource, String name) {
+        try {
+            resource.close();
+        } catch (IOException error) {
+            android.util.Log.w("Piano", "Could not close " + name, error);
+        }
     }
 
     private void setupAudioControls() {
